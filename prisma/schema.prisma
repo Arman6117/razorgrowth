@@ -6,3 +6,193 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum OpportunityType {
+  CROSS_SELL
+  UPSELL
+  REACTIVATION
+}
+
+enum OpportunityStatus {
+  NEW
+  REVIEWED
+  APPROVED
+  REJECTED
+  EXECUTED
+  EXPIRED
+}
+
+enum GrowthActionType {
+  CREATE_PAYMENT_LINK
+  CREATE_OFFER
+}
+
+enum GrowthActionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXECUTING
+  EXECUTED
+  FAILED
+}
+
+enum AuditActor {
+  AGENT
+  MERCHANT
+  SYSTEM
+  RAZORPAY
+}
+
+model Merchant {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  currency    String   @default("INR")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customers      Customer[]
+  products       Product[]
+  orders         Order[]
+  opportunities  Opportunity[]
+  growthActions  GrowthAction[]
+  auditEvents    AuditEvent[]
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  merchantId String
+  name       String
+  email      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@unique([merchantId, email])
+  @@index([merchantId])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  merchantId  String
+  name        String
+  description String?
+  category    String?
+  price       Decimal  @db.Decimal(12, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderItems    OrderItem[]
+  sourceOf      Opportunity[]  @relation("SourceProduct")
+  targetOf      Opportunity[]  @relation("TargetProduct")
+
+  @@index([merchantId])
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  merchantId String
+  customerId String
+  status     OrderStatus @default(PENDING)
+  total      Decimal     @db.Decimal(12, 2)
+  currency   String      @default("INR")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  merchant Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    OrderItem[]
+
+  @@index([merchantId])
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Opportunity {
+  id               String             @id @default(cuid())
+  merchantId       String
+  type             OpportunityType
+  title            String
+  description      String
+  sourceProductId  String?
+  targetProductId  String?
+  confidence       Decimal            @db.Decimal(5, 4)
+  estimatedRevenue Decimal            @db.Decimal(12, 2)
+  evidence         Json
+  status           OpportunityStatus  @default(NEW)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  sourceProduct Product?      @relation("SourceProduct", fields: [sourceProductId], references: [id])
+  targetProduct Product?      @relation("TargetProduct", fields: [targetProductId], references: [id])
+  actions       GrowthAction[]
+
+  @@index([merchantId])
+  @@index([status])
+  @@index([type])
+}
+
+model GrowthAction {
+  id             String             @id @default(cuid())
+  merchantId     String
+  opportunityId  String
+  type           GrowthActionType
+  status         GrowthActionStatus @default(PENDING_APPROVAL)
+  parameters     Json
+  policyResult   Json?
+  approvedAt     DateTime?
+  executedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  merchant    Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  opportunity Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  auditEvents AuditEvent[]
+
+  @@index([merchantId])
+  @@index([opportunityId])
+  @@index([status])
+}
+
+model AuditEvent {
+  id         String     @id @default(cuid())
+  merchantId String
+  actionId   String?
+  eventType  String
+  actor      AuditActor
+  metadata   Json
+  createdAt  DateTime   @default(now())
+
+  merchant Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  action   GrowthAction? @relation(fields: [actionId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([actionId])
+  @@index([createdAt])
+}
