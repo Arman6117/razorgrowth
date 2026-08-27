@@ -1,0 +1,49 @@
+import { NextRequest, NextResponse } from "next/server";
+import { approveGrowthAction } from "@/lib/actions/growth-action";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const body = await req.json();
+    const { merchantId } = body;
+
+    if (!merchantId) {
+      return NextResponse.json(
+        { error: "merchantId is required in request body" },
+        { status: 400 }
+      );
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "GrowthAction id parameter is required" },
+        { status: 400 }
+      );
+    }
+
+    const action = await approveGrowthAction({
+      merchantId,
+      actionId: id,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        action,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to approve GrowthAction";
+    const status =
+      message.includes("not found") ? 404 :
+      message.includes("Cannot approve") || message.includes("Must be in") ? 409 : 400;
+
+    return NextResponse.json({ error: message }, { status });
+  }
+}
