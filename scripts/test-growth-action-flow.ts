@@ -17,6 +17,7 @@ import {
   AuditActor,
 } from "../lib/generated/prisma/enums";
 import { POST as webhookPOST } from "../app/api/webhooks/razorpay/route";
+import { GET as customersGET } from "../app/api/opportunities/[id]/customers/route";
 
 const TEST_WEBHOOK_SECRET = "test_webhook_secret_razorgrowth_2026";
 
@@ -434,6 +435,69 @@ async function runAllTests() {
       throw new Error("Expected already_processed on duplicate webhook");
     }
     console.log("   ✅ Webhook processed, action marked EXECUTED, idempotency confirmed.\n");
+
+    // -------------------------------------------------------------------------
+    // 7b. Test Opportunity Review Query & Duplicate Prevention on Paid/Completed Actions
+    // -------------------------------------------------------------------------
+    console.log("🔍 Test 7b: Opportunity Review Query & Duplicate Prevention on Paid/Completed Actions...");
+
+    // 1. Verify that Opportunity Review query returns the latest EXECUTED status (NOT PENDING_APPROVAL)
+    const oppReviewReq = new Request(
+      `http://localhost:3000/api/opportunities/${testOpportunity.id}/customers?merchantId=${merchant.id}`
+    );
+    const oppReviewRes = await customersGET(oppReviewReq as any, {
+      params: Promise.resolve({ id: testOpportunity.id }),
+    });
+    const oppReviewJson = await oppReviewRes.json();
+    if (!oppReviewJson.success) {
+      throw new Error(`Opportunity review query failed: ${JSON.stringify(oppReviewJson)}`);
+    }
+
+    const reviewedCustomer = oppReviewJson.customers.find(
+      (c: any) => c.id === eligibleCustomerId
+    );
+    if (!reviewedCustomer) {
+      throw new Error(`Eligible customer ${eligibleCustomerId} not found in opportunity review list`);
+    }
+    console.log(`   Opportunity Review Customer Status: ${reviewedCustomer.existingAction?.status} (Expected: EXECUTED)`);
+    if (reviewedCustomer.existingAction?.status !== GrowthActionStatus.EXECUTED) {
+      throw new Error(
+        `Stale status in Opportunity Review! Expected EXECUTED, got '${reviewedCustomer.existingAction?.status}'`
+      );
+    }
+    console.log("   ✅ Opportunity Review returns latest status EXECUTED (no longer shows Pending Approval).");
+
+    // 2. Verify that completed/paid actions PREVENT creating another duplicate action
+    console.log("   Testing duplicate creation prevention for completed/paid action...");
+    let duplicateCreateBlocked = false;
+    try {
+      await createGrowthAction({
+        merchantId: merchant.id,
+        opportunityId: testOpportunity.id,
+        customerId: eligibleCustomerId,
+      });
+    } catch (err: unknown) {
+      duplicateCreateBlocked = true;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`   ✅ Correctly blocked duplicate action creation: "${msg}"`);
+    }
+
+    if (!duplicateCreateBlocked) {
+      throw new Error("Expected createGrowthAction to reject duplicate creation for already completed/paid action");
+    }
+
+    // 3. Verify customer is now recognized as ineligible for target product (already completed/purchased)
+    const isStillEligible = await isCustomerEligible({
+      merchantId: merchant.id,
+      customerId: eligibleCustomerId,
+      targetProductId: testOpportunity.targetProductId!,
+      opportunityId: testOpportunity.id,
+    });
+    if (isStillEligible) {
+      throw new Error("Expected customer to no longer be eligible after completed/paid action");
+    }
+    console.log("   ✅ Verified customer is no longer eligible after completed/paid action.");
+    console.log("   ✅ Opportunity Review & Duplicate Prevention verified.\n");
 
     // -------------------------------------------------------------------------
     // 8. Test Graceful Failure Handling

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isCustomerEligible } from "@/lib/actions/growth-action";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(
   req: NextRequest,
@@ -37,7 +38,7 @@ export async function GET(
       );
     }
 
-    // Find all customers who bought the source product
+    // Find all customers who bought the source product in a PAID order
     const sourceOrders = await prisma.order.findMany({
       where: {
         merchantId,
@@ -55,7 +56,7 @@ export async function GET(
       new Set(sourceOrders.map((o) => o.customerId))
     );
 
-    // Find customers who already bought the target product
+    // Find customers who already bought the target product in a PAID order
     const targetOrders = await prisma.order.findMany({
       where: {
         merchantId,
@@ -93,21 +94,42 @@ export async function GET(
       },
     });
 
-    // Fetch existing GrowthActions for this opportunity
+    // Fetch existing GrowthActions for this opportunity, ordered by latest updated
     const existingActions = await prisma.growthAction.findMany({
       where: {
-        opportunityId: opportunity.id,
         merchantId,
+        opportunityId: opportunity.id,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
+
+    // Status priority ensures authoritative status like EXECUTED or EXECUTING is never shadowed
+    const STATUS_PRIORITY: Record<string, number> = {
+      EXECUTED: 6,
+      EXECUTING: 5,
+      APPROVED: 4,
+      PENDING_APPROVAL: 3,
+      FAILED: 2,
+      REJECTED: 1,
+    };
 
     const actionByCustomerId = new Map<string, (typeof existingActions)[0]>();
     for (const action of existingActions) {
-      const params = action.parameters as Record<string, unknown>;
-      const cId = params?.customerId as string;
-      if (cId && !actionByCustomerId.has(cId)) {
+      const params = (action.parameters || {}) as Record<string, unknown>;
+      const cId = (params?.customerId as string)?.trim();
+      if (!cId) continue;
+
+      const current = actionByCustomerId.get(cId);
+      if (!current) {
         actionByCustomerId.set(cId, action);
+      } else {
+        const currentPri = STATUS_PRIORITY[current.status] || 0;
+        const newPri = STATUS_PRIORITY[action.status] || 0;
+        if (newPri > currentPri) {
+          actionByCustomerId.set(cId, action);
+        } else if (newPri === currentPri && action.updatedAt > current.updatedAt) {
+          actionByCustomerId.set(cId, action);
+        }
       }
     }
 
@@ -132,26 +154,37 @@ export async function GET(
               parameters: existingAction.parameters,
               approvedAt: existingAction.approvedAt,
               executedAt: existingAction.executedAt,
+              updatedAt: existingAction.updatedAt,
               createdAt: existingAction.createdAt,
             }
           : null,
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      opportunity: {
-        id: opportunity.id,
-        title: opportunity.title,
-        sourceProductName: opportunity.sourceProduct?.name,
-        targetProductName: opportunity.targetProduct?.name,
-        targetProductPrice: opportunity.targetProduct
-          ? Number(opportunity.targetProduct.price)
-          : 0,
-        eligibleCount: customerList.length,
+    return NextResponse.json(
+      {
+        success: true,
+        opportunity: {
+          id: opportunity.id,
+          title: opportunity.title,
+          sourceProductName: opportunity.sourceProduct?.name,
+          targetProductName: opportunity.targetProduct?.name,
+          targetProductPrice: opportunity.targetProduct
+            ? Number(opportunity.targetProduct.price)
+            : 0,
+          eligibleCount: customerList.length,
+        },
+        customers: customerList,
       },
-      customers: customerList,
-    });
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch eligible customers";

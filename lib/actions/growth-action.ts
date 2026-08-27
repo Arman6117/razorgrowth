@@ -91,7 +91,30 @@ export async function isCustomerEligible({
     },
   });
 
-  return !targetOrder;
+  if (targetOrder) {
+    return false;
+  }
+
+  // 3. If opportunityId is provided, check customer has NOT already completed/paid an EXECUTED GrowthAction for this opportunity
+  if (opportunityId) {
+    const completedAction = await prisma.growthAction.findFirst({
+      where: {
+        ...(merchantId ? { merchantId } : {}),
+        opportunityId,
+        status: GrowthActionStatus.EXECUTED,
+        parameters: {
+          path: ["customerId"],
+          equals: customerId,
+        },
+      },
+    });
+
+    if (completedAction) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export interface DuplicateActionCheckInput {
@@ -241,26 +264,35 @@ export async function createGrowthAction(input: CreateGrowthActionInput) {
     throw new Error(`Target product '${targetProduct.name}' is inactive`);
   }
 
-  // 6. Enforce customer eligibility
+  // 6. Prevent duplicate completed/paid actions for same merchant + opportunity + customer
+  const existingAction = await duplicateActionCheck({
+    merchantId,
+    opportunityId,
+    customerId,
+  });
+
+  if (existingAction && existingAction.status === GrowthActionStatus.EXECUTED) {
+    throw new Error(
+      `Cannot create duplicate GrowthAction: Customer '${customer.name}' has already completed and paid for this opportunity (GrowthAction: ${existingAction.id}).`
+    );
+  }
+
+  // 7. Enforce customer eligibility
   const eligible = await isCustomerEligible({
     merchantId,
     customerId,
     sourceProductId: sourceProductId || undefined,
     targetProductId: targetProduct.id,
+    opportunityId,
   });
 
   if (!eligible) {
     throw new Error("Customer is not eligible for this opportunity");
   }
 
-  // 7. Prevent duplicate active actions
-  const activeAction = await duplicateActionCheck({
-    merchantId,
-    opportunityId,
-    customerId,
-  });
-  if (activeAction) {
-    return activeAction;
+  // 8. Prevent duplicate active in-flight actions (reusing pending/approved/executing action)
+  if (existingAction) {
+    return existingAction;
   }
 
   // 8. Authoritative pricing from DB

@@ -181,12 +181,31 @@ export default function MerchantDashboard() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // 2. Load Eligible Customers when an Opportunity is opened
+  // 2a. Refresh Eligible Customers for open Opportunity
+  const refreshOpportunityCustomers = useCallback(async (oppId: string) => {
+    try {
+      const res = await fetch(`/api/opportunities/${oppId}/customers?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEligibleCustomers(data.customers || []);
+      }
+    } catch (err) {
+      console.error("Error refreshing customers:", err);
+    }
+  }, []);
+
+  // 2b. Load Eligible Customers when an Opportunity is opened
   const handleOpenOpportunity = async (opp: OpportunityItem) => {
     setSelectedOpportunity(opp);
     setLoadingCustomers(true);
     try {
-      const res = await fetch(`/api/opportunities/${opp.id}/customers`);
+      const res = await fetch(`/api/opportunities/${opp.id}/customers?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Pragma": "no-cache", "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
         const data = await res.json();
         setEligibleCustomers(data.customers || []);
@@ -200,6 +219,15 @@ export default function MerchantDashboard() {
       setLoadingCustomers(false);
     }
   };
+
+  // 2c. Periodic auto-revalidation while Opportunity Review drawer is open
+  useEffect(() => {
+    if (!selectedOpportunity) return;
+    const interval = setInterval(() => {
+      refreshOpportunityCustomers(selectedOpportunity.id);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [selectedOpportunity, refreshOpportunityCustomers]);
 
   // 3. Load GrowthAction Details by ID
   const handleOpenAction = async (actionId: string) => {
@@ -280,6 +308,9 @@ export default function MerchantDashboard() {
 
       showToast("success", "GrowthAction APPROVED! Action is now ready for execution.");
       await handleOpenAction(actionDetail.id);
+      if (selectedOpportunity) {
+        await refreshOpportunityCustomers(selectedOpportunity.id);
+      }
       loadDashboardData();
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "Approval failed");
@@ -309,6 +340,9 @@ export default function MerchantDashboard() {
 
       showToast("success", "Razorpay Payment Link generated in Test Mode!");
       await handleOpenAction(actionDetail.id);
+      if (selectedOpportunity) {
+        await refreshOpportunityCustomers(selectedOpportunity.id);
+      }
       loadDashboardData();
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "Execution failed");
@@ -320,80 +354,28 @@ export default function MerchantDashboard() {
   // 7. Simulate Webhook confirmation (Demo helper for instant webhook verification)
   const handleSimulateWebhook = async () => {
     if (!merchant || !actionDetail) return;
-    const params = actionDetail.parameters;
-    const paymentLinkId = params.paymentLinkId as string;
-    const amountInPaise = (params.amountInPaise as number) || 200000;
-
-    if (!paymentLinkId) {
-      showToast("error", "No active payment link ID found on action.");
-      return;
-    }
-
     setSimulatingWebhook(true);
     try {
-      // In a real environment, Razorpay sends the webhook to /api/webhooks/razorpay.
-      // For demo convenience, we simulate a verified payment_link.paid event via test webhook script logic:
-      const payload = {
-        entity: "event",
-        account_id: "acc_test_razorgrowth",
-        event: "payment_link.paid",
-        contains: ["payment_link", "order", "payment"],
-        payload: {
-          payment_link: {
-            entity: {
-              id: paymentLinkId,
-              entity: "payment_link",
-              amount: amountInPaise,
-              amount_paid: amountInPaise,
-              currency: "INR",
-              status: "paid",
-              short_url: params.shortUrl,
-              customer: {
-                name: params.customerName,
-                email: params.customerEmail,
-              },
-              notes: {
-                merchantId: merchant.id,
-                customerId: params.customerId,
-                targetProductId: params.targetProductId,
-                opportunityId: actionDetail.opportunityId,
-                growthActionId: actionDetail.id,
-              },
-            },
-          },
-          payment: {
-            entity: {
-              id: `pay_demo_${Date.now()}`,
-              entity: "payment",
-              amount: amountInPaise,
-              currency: "INR",
-              status: "captured",
-              method: "upi",
-            },
-          },
-          order: {
-            entity: {
-              id: `order_demo_${Date.now()}`,
-              entity: "order",
-              amount: amountInPaise,
-              amount_paid: amountInPaise,
-              amount_due: 0,
-              currency: "INR",
-              status: "paid",
-            },
-          },
-        },
-        created_at: Math.floor(Date.now() / 1000),
-      };
+      showToast("info", "Simulating verified Razorpay payment webhook...");
+      const res = await fetch(`/api/growth-actions/${actionDetail.id}/simulate-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantId: merchant.id }),
+      });
 
-      // Call internal testing route or refresh action
-      // To ensure signature security, we fetch action updates
-      showToast("info", "Checking Razorpay payment status...");
-      await new Promise((r) => setTimeout(r, 1000));
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to process payment confirmation");
+      }
+
+      showToast("success", "Payment confirmed via Razorpay webhook! Status updated to EXECUTED.");
       await handleOpenAction(actionDetail.id);
+      if (selectedOpportunity) {
+        await refreshOpportunityCustomers(selectedOpportunity.id);
+      }
       loadDashboardData();
     } catch (err) {
-      showToast("error", "Error checking payment status");
+      showToast("error", err instanceof Error ? err.message : "Error confirming payment");
     } finally {
       setSimulatingWebhook(false);
     }
@@ -865,6 +847,10 @@ export default function MerchantDashboard() {
                 onClick={() => {
                   setActiveActionId(null);
                   setActionDetail(null);
+                  if (selectedOpportunity) {
+                    refreshOpportunityCustomers(selectedOpportunity.id);
+                  }
+                  loadDashboardData();
                 }}
                 className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
               >
@@ -1077,6 +1063,27 @@ export default function MerchantDashboard() {
                               Open Checkout
                               <ExternalLink className="w-3 h-3" />
                             </a>
+
+                            {actionDetail.status === "EXECUTING" && (
+                              <Button
+                                size="sm"
+                                onClick={handleSimulateWebhook}
+                                disabled={simulatingWebhook}
+                                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                              >
+                                {simulatingWebhook ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+                                    Verifying...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                    Simulate Payment (Test)
+                                  </>
+                                )}
+                              </Button>
+                            )}
                           </div>
                         </div>
 
