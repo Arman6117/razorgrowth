@@ -351,6 +351,273 @@ export async function createGrowthAction(input: CreateGrowthActionInput) {
   return action;
 }
 
+export interface SkippedCustomerInfo {
+  customerId: string;
+  reason: string;
+  type: "DUPLICATE" | "INELIGIBLE" | "NOT_FOUND" | "ERROR";
+}
+
+export interface CreateGrowthActionsForCustomersInput {
+  merchantId: string;
+  opportunityId: string;
+  customerIds?: string[];
+  sourceProductId?: string;
+  targetProductId?: string;
+  type?: GrowthActionType;
+}
+
+export interface CreateGrowthActionsForCustomersResult {
+  success: boolean;
+  createdCount: number;
+  duplicateCount: number;
+  rejectedCount: number;
+  actionIds: string[];
+  skippedCustomers: SkippedCustomerInfo[];
+  createdActions: GrowthActionModel[];
+}
+
+/**
+ * Creates GrowthActions in bulk for multiple eligible customers for an opportunity.
+ *
+ * SAFETY GUARANTEES:
+ * 1. Strictly validates merchant, opportunity, and product relationships.
+ * 2. Authoritative target product price is resolved from Prisma DB.
+ * 3. Enforces deterministic customer eligibility (source product bought, target product not bought, orders PAID).
+ * 4. Prevents duplicate active actions and prevents duplicate billing on EXECUTED actions.
+ * 5. Handles partial failures gracefully without failing the entire batch.
+ * 6. Creates one PENDING_APPROVAL GrowthAction and GROWTH_ACTION_CREATED AuditEvent per valid customer.
+ */
+export async function createGrowthActionsForCustomers(
+  input: CreateGrowthActionsForCustomersInput
+): Promise<CreateGrowthActionsForCustomersResult> {
+  const { merchantId, opportunityId } = input;
+
+  if (!merchantId?.trim()) {
+    throw new Error("merchantId is required");
+  }
+  if (!opportunityId?.trim()) {
+    throw new Error("opportunityId is required");
+  }
+
+  // 1. Authoritative merchant validation
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: { id: true, name: true, currency: true },
+  });
+  if (!merchant) {
+    throw new Error(`Merchant not found with ID: ${merchantId}`);
+  }
+
+  // 2. Authoritative opportunity validation
+  const opportunity = await prisma.opportunity.findFirst({
+    where: { id: opportunityId, merchantId },
+    select: {
+      id: true,
+      title: true,
+      sourceProductId: true,
+      targetProductId: true,
+      status: true,
+    },
+  });
+  if (!opportunity) {
+    throw new Error(`Opportunity not found or does not belong to merchant: ${opportunityId}`);
+  }
+
+  // 3. Resolve authoritative source and target products
+  const sourceProductId = opportunity.sourceProductId || input.sourceProductId || null;
+  const targetProductId = opportunity.targetProductId || input.targetProductId;
+
+  if (!targetProductId) {
+    throw new Error("Opportunity is missing targetProductId");
+  }
+
+  if (
+    input.targetProductId &&
+    opportunity.targetProductId &&
+    input.targetProductId !== opportunity.targetProductId
+  ) {
+    throw new Error(
+      `targetProductId '${input.targetProductId}' does not match opportunity targetProductId '${opportunity.targetProductId}'`
+    );
+  }
+
+  if (
+    input.sourceProductId &&
+    opportunity.sourceProductId &&
+    input.sourceProductId !== opportunity.sourceProductId
+  ) {
+    throw new Error(
+      `sourceProductId '${input.sourceProductId}' does not match opportunity sourceProductId '${opportunity.sourceProductId}'`
+    );
+  }
+
+  // 4. Validate target product belongs to merchant and is active
+  const targetProduct = await prisma.product.findFirst({
+    where: { id: targetProductId, merchantId },
+    select: { id: true, name: true, price: true, active: true },
+  });
+  if (!targetProduct) {
+    throw new Error(`Target product not found or does not belong to merchant: ${targetProductId}`);
+  }
+  if (!targetProduct.active) {
+    throw new Error(`Target product '${targetProduct.name}' is inactive`);
+  }
+
+  // 5. Authoritative pricing from DB
+  const priceInRupees = Number(targetProduct.price);
+  if (isNaN(priceInRupees) || priceInRupees <= 0) {
+    throw new Error(`Invalid target product price in database: ₹${targetProduct.price}`);
+  }
+  const amountInPaise = Math.round(priceInRupees * 100);
+
+  // 6. Resolve customer list (deduplicate input array if provided)
+  let candidateCustomerIds: string[] = [];
+  if (input.customerIds && Array.isArray(input.customerIds)) {
+    candidateCustomerIds = Array.from(new Set(input.customerIds.map((id) => id?.trim()).filter(Boolean)));
+  }
+
+  const actionType = input.type || GrowthActionType.CREATE_PAYMENT_LINK;
+  const createdActions: GrowthActionModel[] = [];
+  const actionIds: string[] = [];
+  const skippedCustomers: SkippedCustomerInfo[] = [];
+  let createdCount = 0;
+  let duplicateCount = 0;
+  let rejectedCount = 0;
+
+  for (const customerId of candidateCustomerIds) {
+    try {
+      // Validate customer belongs to merchant
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, merchantId },
+        select: { id: true, name: true, email: true },
+      });
+
+      if (!customer) {
+        skippedCustomers.push({
+          customerId,
+          reason: `Customer not found or does not belong to merchant: ${customerId}`,
+          type: "NOT_FOUND",
+        });
+        rejectedCount++;
+        continue;
+      }
+
+      // Check existing duplicate actions
+      const existingAction = await duplicateActionCheck({
+        merchantId,
+        opportunityId,
+        customerId,
+      });
+
+      if (existingAction) {
+        if (existingAction.status === GrowthActionStatus.EXECUTED) {
+          skippedCustomers.push({
+            customerId,
+            reason: `Customer '${customer.name}' has already completed and paid for this opportunity (GrowthAction: ${existingAction.id})`,
+            type: "DUPLICATE",
+          });
+          duplicateCount++;
+          continue;
+        } else {
+          // Active in-flight action (PENDING_APPROVAL, APPROVED, EXECUTING)
+          skippedCustomers.push({
+            customerId,
+            reason: `Active action already exists for customer '${customer.name}' in status '${existingAction.status}' (GrowthAction: ${existingAction.id})`,
+            type: "DUPLICATE",
+          });
+          duplicateCount++;
+          continue;
+        }
+      }
+
+      // Enforce customer eligibility
+      const eligible = await isCustomerEligible({
+        merchantId,
+        customerId,
+        sourceProductId: sourceProductId || undefined,
+        targetProductId: targetProduct.id,
+        opportunityId,
+      });
+
+      if (!eligible) {
+        skippedCustomers.push({
+          customerId,
+          reason: `Customer '${customer.name}' is not eligible for this opportunity`,
+          type: "INELIGIBLE",
+        });
+        rejectedCount++;
+        continue;
+      }
+
+      // Create GrowthAction atomically with AuditEvent
+      const action = await prisma.$transaction(async (tx) => {
+        const created = await tx.growthAction.create({
+          data: {
+            merchantId,
+            opportunityId,
+            type: actionType,
+            status: GrowthActionStatus.PENDING_APPROVAL,
+            parameters: {
+              customerId: customer.id,
+              customerName: customer.name,
+              customerEmail: customer.email,
+              targetProductId: targetProduct.id,
+              targetProductName: targetProduct.name,
+              sourceProductId: sourceProductId,
+              amountInRupees: priceInRupees,
+              amountInPaise: amountInPaise,
+              currency: merchant.currency || "INR",
+            },
+          },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            merchantId,
+            actionId: created.id,
+            eventType: "GROWTH_ACTION_CREATED",
+            actor: AuditActor.AGENT,
+            metadata: {
+              actionId: created.id,
+              opportunityId,
+              customerId: customer.id,
+              targetProductId: targetProduct.id,
+              amountInRupees: priceInRupees,
+              amountInPaise,
+              currency: merchant.currency || "INR",
+              createdAt: new Date().toISOString(),
+              batch: true,
+            },
+          },
+        });
+
+        return created;
+      });
+
+      createdActions.push(action);
+      actionIds.push(action.id);
+      createdCount++;
+    } catch (customerError) {
+      skippedCustomers.push({
+        customerId,
+        reason: customerError instanceof Error ? customerError.message : String(customerError),
+        type: "ERROR",
+      });
+      rejectedCount++;
+    }
+  }
+
+  return {
+    success: true,
+    createdCount,
+    duplicateCount,
+    rejectedCount,
+    actionIds,
+    skippedCustomers,
+    createdActions,
+  };
+}
+
 export interface ApproveGrowthActionInput {
   merchantId: string;
   actionId: string;
@@ -426,6 +693,105 @@ export async function approveGrowthAction(input: ApproveGrowthActionInput) {
   });
 
   return updatedAction;
+}
+
+export interface ApproveGrowthActionsForOpportunityInput {
+  merchantId: string;
+  opportunityId: string;
+}
+
+export interface ApproveGrowthActionsForOpportunityResult {
+  success: boolean;
+  approvedCount: number;
+  actionIds: string[];
+}
+
+/**
+ * Bulk approves all PENDING_APPROVAL GrowthActions for a specific opportunity.
+ *
+ * SAFETY GUARANTEES:
+ * 1. Strictly validates merchant and opportunity ownership.
+ * 2. Selects ONLY actions in PENDING_APPROVAL status.
+ * 3. Atomically transitions status to APPROVED and records individual GROWTH_ACTION_APPROVED AuditEvents with actor MERCHANT.
+ * 4. Strictly human-controlled operation (NOT exposed to LLM).
+ */
+export async function approveGrowthActionsForOpportunity(
+  input: ApproveGrowthActionsForOpportunityInput
+): Promise<ApproveGrowthActionsForOpportunityResult> {
+  const { merchantId, opportunityId } = input;
+
+  if (!merchantId?.trim()) {
+    throw new Error("merchantId is required");
+  }
+  if (!opportunityId?.trim()) {
+    throw new Error("opportunityId is required");
+  }
+
+  // 1. Authoritative opportunity & merchant validation
+  const opportunity = await prisma.opportunity.findFirst({
+    where: { id: opportunityId, merchantId },
+  });
+
+  if (!opportunity) {
+    throw new Error(`Opportunity not found or does not belong to merchant: ${opportunityId}`);
+  }
+
+  // 2. Find all PENDING_APPROVAL GrowthActions for this opportunity and merchant
+  const pendingActions = await prisma.growthAction.findMany({
+    where: {
+      merchantId,
+      opportunityId,
+      status: GrowthActionStatus.PENDING_APPROVAL,
+    },
+    select: { id: true, opportunityId: true },
+  });
+
+  if (pendingActions.length === 0) {
+    return {
+      success: true,
+      approvedCount: 0,
+      actionIds: [],
+    };
+  }
+
+  const approvedAt = new Date();
+  const approvedActionIds = pendingActions.map((a) => a.id);
+
+  // 3. Atomically update actions to APPROVED and create individual AuditEvents
+  await prisma.$transaction(async (tx) => {
+    await tx.growthAction.updateMany({
+      where: {
+        id: { in: approvedActionIds },
+        merchantId,
+        status: GrowthActionStatus.PENDING_APPROVAL,
+      },
+      data: {
+        status: GrowthActionStatus.APPROVED,
+        approvedAt,
+      },
+    });
+
+    await tx.auditEvent.createMany({
+      data: approvedActionIds.map((actionId) => ({
+        merchantId,
+        actionId,
+        eventType: "GROWTH_ACTION_APPROVED",
+        actor: AuditActor.MERCHANT,
+        metadata: {
+          actionId,
+          opportunityId,
+          approvedAt: approvedAt.toISOString(),
+          batch: true,
+        },
+      })),
+    });
+  });
+
+  return {
+    success: true,
+    approvedCount: approvedActionIds.length,
+    actionIds: approvedActionIds,
+  };
 }
 
 export interface ExecuteGrowthActionInput {

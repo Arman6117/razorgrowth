@@ -28,6 +28,7 @@ import {
 import { QRCode } from "@/components/qr-code";
 import { AuditTimeline, AuditEventItem } from "@/components/audit-timeline";
 import { Button } from "@/components/ui/button";
+import { AgentChatDrawer } from "@/components/agent-chat-drawer";
 
 interface MerchantInfo {
   id: string;
@@ -131,6 +132,8 @@ export default function MerchantDashboard() {
 
   // Operation action states (creating, approving, executing, simulating webhook)
   const [creatingActionForCustomer, setCreatingActionForCustomer] = useState<string | null>(null);
+  const [creatingBatchActions, setCreatingBatchActions] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [simulatingWebhook, setSimulatingWebhook] = useState(false);
@@ -139,6 +142,9 @@ export default function MerchantDashboard() {
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+
+  // Merchant Conversational AI Agent state
+  const [showChatDrawer, setShowChatDrawer] = useState(false);
 
   // AI Agent tool testing modal state
   const [showAgentPanel, setShowAgentPanel] = useState(false);
@@ -290,7 +296,52 @@ export default function MerchantDashboard() {
     }
   };
 
-  // 5. Merchant Approves GrowthAction
+  // 4b. Create GrowthActions in Batch for All Eligible Customers
+  const handleCreateBatchGrowthActions = async () => {
+    if (!merchant || !selectedOpportunity) return;
+    const uncreatedCustomerIds = eligibleCustomers
+      .filter((c) => !c.existingAction)
+      .map((c) => c.id);
+
+    if (uncreatedCustomerIds.length === 0) {
+      showToast("info", "All eligible customers already have GrowthActions created.");
+      return;
+    }
+
+    setCreatingBatchActions(true);
+    try {
+      const res = await fetch("/api/growth-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: merchant.id,
+          opportunityId: selectedOpportunity.id,
+          customerIds: uncreatedCustomerIds,
+          sourceProductId: selectedOpportunity.sourceProductId,
+          targetProductId: selectedOpportunity.targetProductId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create batch GrowthActions");
+      }
+
+      showToast(
+        "success",
+        `Batch created ${data.createdCount} GrowthActions in PENDING_APPROVAL! (${data.duplicateCount} duplicates, ${data.rejectedCount} skipped)`
+      );
+
+      await refreshOpportunityCustomers(selectedOpportunity.id);
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Error creating batch actions");
+    } finally {
+      setCreatingBatchActions(false);
+    }
+  };
+
+  // 5. Merchant Approves Single GrowthAction
   const handleApproveAction = async () => {
     if (!merchant || !actionDetail) return;
     setApproving(true);
@@ -316,6 +367,39 @@ export default function MerchantDashboard() {
       showToast("error", err instanceof Error ? err.message : "Approval failed");
     } finally {
       setApproving(false);
+    }
+  };
+
+  // 5b. Bulk Approve All PENDING_APPROVAL Actions for Selected Opportunity
+  const handleBulkApprove = async () => {
+    if (!merchant || !selectedOpportunity) return;
+    setBulkApproving(true);
+    try {
+      const res = await fetch("/api/growth-actions/bulk-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: merchant.id,
+          opportunityId: selectedOpportunity.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to bulk approve actions");
+      }
+
+      showToast(
+        "success",
+        `Successfully approved ${data.approvedCount} GrowthActions! Actions are now ready for execution.`
+      );
+
+      await refreshOpportunityCustomers(selectedOpportunity.id);
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Error bulk approving actions");
+    } finally {
+      setBulkApproving(false);
     }
   };
 
@@ -512,13 +596,22 @@ export default function MerchantDashboard() {
             </div>
 
             <Button
+              size="sm"
+              onClick={() => setShowChatDrawer(true)}
+              className="gap-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-md shadow-indigo-500/20 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>AI Growth Agent</span>
+            </Button>
+
+            <Button
               variant="outline"
               size="sm"
               onClick={() => setShowAgentPanel(true)}
-              className="gap-1.5 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50"
+              className="gap-1.5 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50 cursor-pointer"
             >
               <Bot className="w-4 h-4 text-purple-600" />
-              AI Agent Tools
+              <span className="hidden sm:inline">Developer Tools</span>
             </Button>
 
             <Button
@@ -526,7 +619,7 @@ export default function MerchantDashboard() {
               size="sm"
               onClick={loadDashboardData}
               disabled={refreshing}
-              className="gap-1.5"
+              className="gap-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -605,6 +698,37 @@ export default function MerchantDashboard() {
                 <span>{merchant?.counts.actionsByStatus?.EXECUTING || 0} Active</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Conversational AI Agent Quick Action Banner */}
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-900/10 via-purple-900/10 to-blue-900/10 border border-indigo-200 dark:border-indigo-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-neutral-900 dark:text-white">
+                  Autonomous AI Commerce Agent
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  Active & Ready
+                </span>
+              </div>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
+                Instruct the AI agent to analyze cross-sell opportunities, verify customer eligibility, and prepare batch GrowthActions.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              onClick={() => setShowChatDrawer(true)}
+              className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold text-xs shadow-sm gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Chat with AI Agent
+            </Button>
           </div>
         </div>
 
@@ -757,6 +881,71 @@ export default function MerchantDashboard() {
                   Verified: Bought {selectedOpportunity.sourceProductName}, never bought {selectedOpportunity.targetProductName}
                 </span>
               </div>
+
+              {/* Batch Action Toolbar */}
+              {eligibleCustomers.length > 0 && !loadingCustomers && (() => {
+                const uncreatedCustomers = eligibleCustomers.filter((c) => !c.existingAction);
+                const pendingApprovalCustomers = eligibleCustomers.filter(
+                  (c) => c.existingAction?.status === "PENDING_APPROVAL"
+                );
+
+                if (uncreatedCustomers.length === 0 && pendingApprovalCustomers.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-blue-600" />
+                        Opportunity Batch Automation
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      {uncreatedCustomers.length > 0 && (
+                        <Button
+                          onClick={handleCreateBatchGrowthActions}
+                          disabled={creatingBatchActions}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
+                        >
+                          {creatingBatchActions ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                              Creating Actions...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                              Create Actions for All {uncreatedCustomers.length} Eligible Customers
+                            </>
+                          )}
+                        </Button>
+                      )}
+
+                      {pendingApprovalCustomers.length > 0 && (
+                        <Button
+                          onClick={handleBulkApprove}
+                          disabled={bulkApproving}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                        >
+                          {bulkApproving ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                              Approving Actions...
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                              Approve All {pendingApprovalCustomers.length} Pending Actions
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {loadingCustomers ? (
                 <div className="py-12 text-center text-neutral-500">
@@ -1230,6 +1419,15 @@ export default function MerchantDashboard() {
           </div>
         </div>
       )}
+
+      {/* Merchant-Facing Conversational AI Agent Drawer */}
+      <AgentChatDrawer
+        isOpen={showChatDrawer}
+        onClose={() => setShowChatDrawer(false)}
+        merchantId={merchant?.id || null}
+        merchantName={merchant?.name}
+        onRefreshDashboard={loadDashboardData}
+      />
     </div>
   );
 }

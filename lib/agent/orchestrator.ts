@@ -1,5 +1,5 @@
-import { generateText, tool } from "ai";
-import { google } from "@ai-sdk/google";
+import { generateText, tool, isStepCount } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { prisma } from "../prisma";
@@ -7,6 +7,7 @@ import {
   analyzeCrossSellTool,
   isCustomerEligibleTool,
   createGrowthActionTool,
+  createGrowthActionsForCustomersTool,
   getGrowthActionStatusTool,
 } from "./tools";
 
@@ -31,6 +32,7 @@ export interface AgentOrchestratorResponse {
   opportunitiesFound: unknown[];
   actionsCreated: unknown[];
   actionsPendingApproval: number;
+  iterations?: number;
   error?: string;
 }
 
@@ -43,7 +45,8 @@ function getLanguageModel() {
   const openaiKey = process.env.OPENAI_API_KEY;
 
   if (geminiKey) {
-    return google("gemini-2.5-flash");
+    const google = createGoogleGenerativeAI({ apiKey: geminiKey });
+    return google(process.env.AGENT_MODEL || "gemini-3.5-flash");
   } else if (openaiKey) {
     return openai("gpt-4o");
   }
@@ -60,24 +63,25 @@ Your primary role is to help merchants automatically analyze sales data, discove
 CRITICAL OPERATING RULES & SAFETY BOUNDARIES:
 1. DETERMINISTIC BACKEND TOOLS ARE AUTHORITATIVE:
    - You MUST NOT calculate product prices, discount amounts, or customer eligibility in your prompt logic.
-   - Always call backend tools (analyzeCrossSell, isCustomerEligible, createGrowthAction, getGrowthActionStatus) to retrieve or mutate state.
+   - Always call backend tools (analyzeCrossSell, isCustomerEligible, createGrowthAction, createGrowthActionsForCustomers, getGrowthActionStatus) to retrieve or mutate state.
    - Do NOT invent product prices or fabricate customer records.
 
 2. HUMAN CONTROL BOUNDARY (NO DIRECT APPROVAL OR EXECUTION):
-   - You CAN create GrowthActions using 'createGrowthAction'. All created actions will automatically have status 'PENDING_APPROVAL'.
+   - You CAN create GrowthActions using 'createGrowthActionsForCustomers' or 'createGrowthAction'. All created actions will automatically have status 'PENDING_APPROVAL'.
    - You MUST NOT approve or execute financial actions. Merchant approval is strictly human-controlled.
    - Creating a GrowthAction is NOT executing or approving it.
 
-3. MULTI-CUSTOMER CAMPAIGNS:
-   - When asked to analyze opportunities or create campaigns, first call 'analyzeCrossSell' to find opportunities and eligible customers.
-   - For top opportunities, iterate through eligible customers and call 'createGrowthAction'.
+3. MULTI-CUSTOMER CAMPAIGNS & BULK CREATION:
+   - When asked to analyze opportunities or create actions for eligible customers, first call 'analyzeCrossSell' to find opportunities and verified eligible customers.
+   - When creating actions for multiple eligible customers of an opportunity, ALWAYS use the bulk tool 'createGrowthActionsForCustomers' passing the opportunityId and array of customerIds.
+   - Do NOT make multiple repeated single-customer 'createGrowthAction' tool calls when creating actions for a list of eligible customers.
    - The backend deterministic engine handles duplicate prevention and eligibility validation under the hood.
 
 4. MERCHANT ISOLATION:
    - Always pass the provided 'merchantId' in every tool call.
 
 5. CONCISE, DATA-BACKED EXPLANATIONS:
-   - Provide a clear, professional summary explaining which opportunities were selected, why they were chosen, how many eligible customers were identified, and which GrowthActions were created in PENDING_APPROVAL status.
+   - Provide a clear, professional summary explaining which opportunities were selected, why they were chosen, how many eligible customers were identified, and how many GrowthActions were created in PENDING_APPROVAL status based strictly on the tool outputs.
 `;
 
 /**
@@ -224,6 +228,33 @@ export async function runAgentOrchestrator(
       },
     }),
 
+    createGrowthActionsForCustomers: tool({
+      description:
+        "Creates GrowthActions in bulk (CREATE_PAYMENT_LINK) in PENDING_APPROVAL status for a list of eligible customers of an opportunity. Target product price is resolved authoritatively from DB. Use this tool when creating actions for multiple eligible customers. The AI CANNOT approve or execute financial actions.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+        opportunityId: z.string().describe("Discovered opportunity identifier."),
+        customerIds: z.array(z.string()).describe("Array of verified eligible customer IDs."),
+        sourceProductId: z.string().optional().describe("Source product identifier."),
+        targetProductId: z.string().optional().describe("Target product identifier."),
+      }),
+      execute: async (toolInput: {
+        merchantId: string;
+        opportunityId: string;
+        customerIds: string[];
+        sourceProductId?: string;
+        targetProductId?: string;
+      }) => {
+        return await createGrowthActionsForCustomersTool({
+          merchantId: toolInput.merchantId,
+          opportunityId: toolInput.opportunityId,
+          customerIds: toolInput.customerIds,
+          sourceProductId: toolInput.sourceProductId,
+          targetProductId: toolInput.targetProductId,
+        });
+      },
+    }),
+
     getGrowthActionStatus: tool({
       description:
         "Retrieves current status, payment link information, and audit timeline for a GrowthAction.",
@@ -255,6 +286,7 @@ Merchant Instruction:
       system: SYSTEM_PROMPT,
       prompt: promptText,
       tools,
+      stopWhen: isStepCount(5),
     });
 
     // 5. Process & Synthesize Output
@@ -265,21 +297,32 @@ Merchant Instruction:
     if (result.toolResults && Array.isArray(result.toolResults)) {
       for (const tr of result.toolResults as Array<{
         toolName: string;
+        input?: Record<string, unknown>;
         args?: Record<string, unknown>;
+        output?: unknown;
         result?: unknown;
       }>) {
+        const toolArgs = tr.input || tr.args || {};
+        const toolOutput = tr.output !== undefined ? tr.output : tr.result;
+
         toolCallsSummary.push({
           toolName: tr.toolName,
-          args: tr.args || {},
-          result: tr.result,
+          args: toolArgs,
+          result: toolOutput,
         });
 
-        const resData = tr.result as { success?: boolean; data?: unknown };
+        const resData = toolOutput as { success?: boolean; data?: unknown };
         if (tr.toolName === "analyzeCrossSell" && resData?.success && Array.isArray(resData.data)) {
           opportunitiesFound.push(...resData.data);
         }
         if (tr.toolName === "createGrowthAction" && resData?.success && resData.data) {
           actionsCreated.push(resData.data);
+        }
+        if (tr.toolName === "createGrowthActionsForCustomers" && resData?.success && resData.data) {
+          const bulkData = resData.data as { createdActions?: unknown[] };
+          if (Array.isArray(bulkData.createdActions)) {
+            actionsCreated.push(...bulkData.createdActions);
+          }
         }
       }
     }
@@ -298,6 +341,7 @@ Merchant Instruction:
       opportunitiesFound,
       actionsCreated,
       actionsPendingApproval: pendingCount,
+      iterations: result.steps?.length || 1,
     };
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);

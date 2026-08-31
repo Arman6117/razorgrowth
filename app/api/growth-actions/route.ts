@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createGrowthAction,
+  createGrowthActionsForCustomers,
   listGrowthActions,
 } from "@/lib/actions/growth-action";
 import { GrowthActionStatus } from "@/lib/generated/prisma/enums";
@@ -14,16 +15,49 @@ export async function POST(req: NextRequest) {
       merchantId,
       opportunityId,
       customerId,
+      customerIds,
       sourceProductId,
       targetProductId,
       type,
     } = body;
 
-    if (!merchantId || !opportunityId || !customerId) {
+    if (!merchantId || !opportunityId) {
       return NextResponse.json(
         {
-          error:
-            "Missing required fields: merchantId, opportunityId, and customerId are required",
+          error: "merchantId and opportunityId are required",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Batch creation mode
+    if (Array.isArray(customerIds)) {
+      if (customerIds.length === 0) {
+        return NextResponse.json(
+          {
+            error: "customerIds must be a non-empty array of customer IDs",
+          },
+          { status: 400 }
+        );
+      }
+
+      const result = await createGrowthActionsForCustomers({
+        merchantId,
+        opportunityId,
+        customerIds,
+        sourceProductId,
+        targetProductId,
+        type,
+      });
+
+      return NextResponse.json(result, { status: 201 });
+    }
+
+    // Single action creation mode
+    if (!customerId) {
+      return NextResponse.json(
+        {
+          error: "Either customerId (string) or customerIds (array) is required",
         },
         { status: 400 }
       );

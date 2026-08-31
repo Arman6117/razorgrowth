@@ -3,6 +3,7 @@ import { analyzeCrossSell, CrossSellOpportunity } from "../analytics/cross-sell"
 import {
   isCustomerEligible,
   createGrowthAction,
+  createGrowthActionsForCustomers,
   approveGrowthAction,
   getGrowthAction,
   duplicateActionCheck,
@@ -27,7 +28,15 @@ export interface ToolDefinition {
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, { type: string; description: string; enum?: string[] }>;
+    properties: Record<
+      string,
+      {
+        type: string;
+        description: string;
+        enum?: string[];
+        items?: { type: string };
+      }
+    >;
     required: string[];
   };
 }
@@ -194,6 +203,86 @@ export async function createGrowthActionTool(input: {
     return {
       success: false,
       toolName: "createGrowthAction",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Tool 3b: createGrowthActionsForCustomersTool
+ *
+ * Creates GrowthActions in bulk for a list of eligible customers in PENDING_APPROVAL status.
+ *
+ * STRICT SAFETY BOUNDARIES:
+ * - Authoritative target product price is strictly resolved from Prisma DB.
+ * - Customer eligibility is deterministically checked for each customer.
+ * - Duplicate protection prevents multiple in-flight actions or duplicate billing for EXECUTED actions.
+ * - Records individual GROWTH_ACTION_CREATED AuditEvents.
+ */
+export async function createGrowthActionsForCustomersTool(input: {
+  merchantId: string;
+  opportunityId: string;
+  customerIds: string[];
+  sourceProductId?: string;
+  targetProductId?: string;
+}): Promise<AgentToolResponse> {
+  const { merchantId, opportunityId, customerIds, sourceProductId, targetProductId } = input;
+
+  if (!merchantId?.trim() || !opportunityId?.trim()) {
+    return {
+      success: false,
+      toolName: "createGrowthActionsForCustomers",
+      error: "merchantId and opportunityId are required parameters",
+    };
+  }
+
+  if (!Array.isArray(customerIds) || customerIds.length === 0) {
+    return {
+      success: false,
+      toolName: "createGrowthActionsForCustomers",
+      error: "customerIds must be a non-empty array of customer IDs",
+    };
+  }
+
+  try {
+    const result = await createGrowthActionsForCustomers({
+      merchantId,
+      opportunityId,
+      customerIds,
+      sourceProductId,
+      targetProductId,
+    });
+
+    return {
+      success: true,
+      toolName: "createGrowthActionsForCustomers",
+      data: {
+        createdCount: result.createdCount,
+        duplicateCount: result.duplicateCount,
+        rejectedCount: result.rejectedCount,
+        actionIds: result.actionIds,
+        skippedCustomers: result.skippedCustomers,
+        createdActions: result.createdActions.map((a) => {
+          const params = a.parameters as Record<string, unknown>;
+          return {
+            actionId: a.id,
+            opportunityId: a.opportunityId,
+            status: a.status,
+            type: a.type,
+            targetProduct: params.targetProductName,
+            customerName: params.customerName,
+            customerEmail: params.customerEmail,
+            amountInRupees: params.amountInRupees,
+            amountInPaise: params.amountInPaise,
+          };
+        }),
+      },
+      message: `Bulk creation completed: ${result.createdCount} GrowthActions created in 'PENDING_APPROVAL' status, ${result.duplicateCount} duplicates skipped, ${result.rejectedCount} rejected/skipped. Actions require merchant approval before execution.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      toolName: "createGrowthActionsForCustomers",
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -379,6 +468,38 @@ export const agentToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "createGrowthActionsForCustomers",
+    description:
+      "Creates GrowthActions in bulk (CREATE_PAYMENT_LINK) in PENDING_APPROVAL status for a list of eligible customers of an opportunity. Prices are resolved authoritatively from DB. The AI CANNOT approve or execute financial actions.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+        opportunityId: {
+          type: "string",
+          description: "Discovered opportunity identifier.",
+        },
+        customerIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of eligible customer IDs.",
+        },
+        targetProductId: {
+          type: "string",
+          description: "Target product identifier (optional if opportunity specified).",
+        },
+        sourceProductId: {
+          type: "string",
+          description: "Source product identifier (optional if opportunity specified).",
+        },
+      },
+      required: ["merchantId", "opportunityId", "customerIds"],
+    },
+  },
+  {
     name: "approveGrowthAction",
     description:
       "Records merchant approval for a PENDING_APPROVAL GrowthAction, transitioning it to APPROVED status.",
@@ -445,6 +566,15 @@ export async function executeAgentTool(
         merchantId: toolInput.merchantId as string,
         opportunityId: toolInput.opportunityId as string,
         customerId: toolInput.customerId as string,
+        sourceProductId: toolInput.sourceProductId as string | undefined,
+        targetProductId: toolInput.targetProductId as string | undefined,
+      });
+
+    case "createGrowthActionsForCustomers":
+      return createGrowthActionsForCustomersTool({
+        merchantId: toolInput.merchantId as string,
+        opportunityId: toolInput.opportunityId as string,
+        customerIds: toolInput.customerIds as string[],
         sourceProductId: toolInput.sourceProductId as string | undefined,
         targetProductId: toolInput.targetProductId as string | undefined,
       });

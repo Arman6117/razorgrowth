@@ -152,8 +152,37 @@ async function runAgentToolsTest() {
     }
     console.log("   ✅ createGrowthAction tool passed with authoritative pricing and guardrails.\n");
 
-    // 6. Test Tool: approveGrowthAction
-    console.log("👍 6. Testing Tool: approveGrowthAction...");
+    // 6. Test Tool: createGrowthActionsForCustomers (Batch creation)
+    console.log("📦 6. Testing Tool: createGrowthActionsForCustomers (Batch Creation)...");
+    if (sampleOpp.eligibleCustomerIds.length > 1) {
+      const batchResult = await executeAgentTool("createGrowthActionsForCustomers", {
+        merchantId: merchant.id,
+        opportunityId: dbOpportunity.id,
+        customerIds: sampleOpp.eligibleCustomerIds,
+        sourceProductId: sampleOpp.sourceProductId,
+        targetProductId: sampleOpp.targetProductId,
+      });
+
+      console.log(`   Success: ${batchResult.success}`);
+      console.log(`   Message: ${batchResult.message}`);
+      const batchData = batchResult.data as {
+        createdCount: number;
+        duplicateCount: number;
+        rejectedCount: number;
+        actionIds: string[];
+      };
+
+      if (!batchResult.success || !Array.isArray(batchData.actionIds)) {
+        throw new Error(`createGrowthActionsForCustomers failed: ${batchResult.error}`);
+      }
+
+      createdActionIds.push(...batchData.actionIds);
+      console.log(`   Batch Created: ${batchData.createdCount}, Duplicates: ${batchData.duplicateCount}, Rejected: ${batchData.rejectedCount}`);
+      console.log("   ✅ createGrowthActionsForCustomers tool passed.\n");
+    }
+
+    // 7. Test Tool: approveGrowthAction
+    console.log("👍 7. Testing Tool: approveGrowthAction...");
     const approveResult = await executeAgentTool("approveGrowthAction", {
       merchantId: merchant.id,
       actionId: actionData.actionId,
@@ -168,8 +197,8 @@ async function runAgentToolsTest() {
     }
     console.log("   ✅ approveGrowthAction tool passed and recorded merchant approval.\n");
 
-    // 7. Test Tool: getGrowthActionStatus
-    console.log("📜 7. Testing Tool: getGrowthActionStatus...");
+    // 8. Test Tool: getGrowthActionStatus
+    console.log("📜 8. Testing Tool: getGrowthActionStatus...");
     const statusResult = await executeAgentTool("getGrowthActionStatus", {
       merchantId: merchant.id,
       actionId: actionData.actionId,
