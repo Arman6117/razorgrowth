@@ -2,6 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/prisma";
 import { OrderStatus } from "../lib/generated/prisma/enums";
+import { hashPassword } from "../lib/auth/password";
 
 // Deterministic Pseudo-Random Number Generator (Mulberry32)
 function createRng(seed = 42) {
@@ -110,10 +111,12 @@ async function seed() {
 
   // 2. Create Demo Merchant
   console.log("🏢 Creating demo merchant: TechNova Store...");
+  const defaultPasswordHash = await hashPassword("Demo1234!");
   const merchant = await prisma.merchant.create({
     data: {
       name: "TechNova Store",
       email: DEMO_MERCHANT_EMAIL,
+      passwordHash: defaultPasswordHash,
       currency: "INR",
     },
   });

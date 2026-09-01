@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCustomerEligible } from "@/lib/actions/growth-action";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,12 +11,12 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
     const { id } = await context.params;
-    const { searchParams } = new URL(req.url);
-    let merchantId = searchParams.get("merchantId");
 
-    const opportunity = await prisma.opportunity.findUnique({
-      where: { id },
+    const opportunity = await prisma.opportunity.findFirst({
+      where: { id, merchantId },
       include: {
         sourceProduct: true,
         targetProduct: true,
@@ -28,8 +29,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    merchantId = opportunity.merchantId;
 
     if (!opportunity.sourceProductId || !opportunity.targetProductId) {
       return NextResponse.json(
@@ -186,6 +185,9 @@ export async function GET(
       }
     );
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message =
       error instanceof Error ? error.message : "Failed to fetch eligible customers";
     return NextResponse.json({ error: message }, { status: 500 });

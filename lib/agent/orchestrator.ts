@@ -157,7 +157,7 @@ export function getPrimaryModelConfig(): ProviderModelConfig | null {
  */
 export function getFallbackModelConfig(): ProviderModelConfig | null {
   const fallbackProvider = (process.env.AGENT_FALLBACK_PROVIDER || "openrouter").toLowerCase();
-  const fallbackModelName = process.env.AGENT_FALLBACK_MODEL || "openai/gpt-oss-20b:free";
+  const fallbackModelName = process.env.AGENT_FALLBACK_MODEL || "liquid/lfm-2.5-2.6b:free";
 
   if (fallbackProvider === "openrouter") {
     const openrouterKey = process.env.OPENROUTER_API_KEY;

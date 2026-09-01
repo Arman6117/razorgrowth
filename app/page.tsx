@@ -24,6 +24,11 @@ import {
   Bot,
   Zap,
   Info,
+  LogOut,
+  Key,
+  Upload,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { QRCode } from "@/components/qr-code";
 import { AuditTimeline, AuditEventItem } from "@/components/audit-timeline";
@@ -156,14 +161,44 @@ export default function MerchantDashboard() {
     setTimeout(() => setToast(null), 5000);
   };
 
+  const [connectionInfo, setConnectionInfo] = useState<{
+    connected: boolean;
+    connection?: { keyId: string; mode: string; connectedAt: string; lastSyncedAt?: string | null } | null;
+  } | null>(null);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectKeyId, setConnectKeyId] = useState("");
+  const [connectKeySecret, setConnectKeySecret] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  const [importingCsv, setImportingCsv] = useState(false);
+
+  const [syncingType, setSyncingType] = useState<"customers" | "orders" | "all" | null>(null);
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch {
+      window.location.href = "/login";
+    }
+  };
+
   // 1. Load Merchant and Opportunities
   const loadDashboardData = useCallback(async () => {
     try {
       setRefreshing(true);
-      const [merchantRes, oppsRes] = await Promise.all([
+      const [merchantRes, oppsRes, connRes] = await Promise.all([
         fetch("/api/merchant"),
         fetch("/api/opportunities"),
+        fetch("/api/razorpay/connection"),
       ]);
+
+      if (merchantRes.status === 401 || oppsRes.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
 
       if (merchantRes.ok) {
         const data = await merchantRes.json();
@@ -174,6 +209,11 @@ export default function MerchantDashboard() {
         const data = await oppsRes.json();
         setOpportunities(data.opportunities || []);
       }
+
+      if (connRes.ok) {
+        const data = await connRes.json();
+        setConnectionInfo(data);
+      }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
       showToast("error", "Failed to load dashboard data. Check database connection.");
@@ -182,6 +222,115 @@ export default function MerchantDashboard() {
       setRefreshing(false);
     }
   }, []);
+
+  const handleConnectRazorpay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!connectKeyId.trim() || !connectKeySecret.trim()) {
+      showToast("error", "Please provide both Razorpay Key ID and Key Secret.");
+      return;
+    }
+
+    setConnecting(true);
+    try {
+      const res = await fetch("/api/razorpay/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyId: connectKeyId.trim(),
+          keySecret: connectKeySecret.trim(),
+          mode: "TEST",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to validate Razorpay credentials");
+      }
+      showToast("success", "Razorpay Test Mode connected successfully!");
+      setShowConnectModal(false);
+      setConnectKeyId("");
+      setConnectKeySecret("");
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Failed to connect Razorpay");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnectRazorpay = async () => {
+    if (!confirm("Are you sure you want to disconnect Razorpay?")) return;
+    try {
+      const res = await fetch("/api/razorpay/connect", { method: "DELETE" });
+      if (res.ok) {
+        showToast("info", "Razorpay account disconnected.");
+        loadDashboardData();
+      }
+    } catch {
+      showToast("error", "Failed to disconnect Razorpay");
+    }
+  };
+
+  const handleSyncData = async (type: "customers" | "orders" | "all") => {
+    setSyncingType(type);
+    try {
+      const endpoint =
+        type === "customers"
+          ? "/api/razorpay/sync/customers"
+          : type === "orders"
+          ? "/api/razorpay/sync/orders"
+          : "/api/razorpay/sync";
+
+      const res = await fetch(endpoint, { method: "POST" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to sync ${type}`);
+      }
+
+      if (type === "customers") {
+        showToast("success", `Customers synced: ${data.syncedCount} new, ${data.updatedCount} updated (${data.totalFound} found).`);
+      } else if (type === "orders") {
+        showToast("success", `Orders synced: ${data.syncedCount} new (${data.totalFound} found).`);
+      } else {
+        showToast("success", `Data sync complete: ${data.customers?.totalFound || 0} customers, ${data.orders?.totalFound || 0} orders.`);
+      }
+
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : `Failed to sync ${type}`);
+    } finally {
+      setSyncingType(null);
+    }
+  };
+
+  const handleImportCsv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvText.trim()) {
+      showToast("error", "Please paste CSV content or select a file.");
+      return;
+    }
+
+    setImportingCsv(true);
+    try {
+      const res = await fetch("/api/catalog/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvData: csvText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to import catalog");
+      }
+      showToast("success", data.message || `Catalog imported: ${data.createdCount} products created.`);
+      setShowCsvModal(false);
+      setCsvText("");
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Failed to import catalog");
+    } finally {
+      setImportingCsv(false);
+    }
+  };
 
   useEffect(() => {
     loadDashboardData();
@@ -624,6 +773,16 @@ export default function MerchantDashboard() {
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="gap-1.5 border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Log out</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -729,6 +888,157 @@ export default function MerchantDashboard() {
               <Sparkles className="w-3.5 h-3.5" />
               Chat with AI Agent
             </Button>
+          </div>
+        </div>
+
+        {/* Merchant Store Data & Razorpay Integration Section */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-indigo-500" />
+                Store Integration & Data Ingestion
+              </h3>
+              <p className="text-xs text-neutral-500">
+                Connect Razorpay Test Mode and synchronize transaction history or import product catalog.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                Customers: <strong>{merchant?.counts.customers || 0}</strong>
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                Orders: <strong>{merchant?.counts.orders || 0}</strong>
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                Products: <strong>{merchant?.counts.products || 0}</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Razorpay Connection Card */}
+            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                    Razorpay Gateway
+                  </span>
+                  {connectionInfo?.connected ? (
+                    <span className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Connected (Test)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">
+                      Not Connected
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+                  {connectionInfo?.connected ? (
+                    <>
+                      <p className="font-mono text-neutral-800 dark:text-neutral-200">
+                        {connectionInfo.connection?.keyId.slice(0, 12)}...
+                      </p>
+                      <p className="text-[11px] text-neutral-400 mt-1">
+                        Last Synced: {connectionInfo.connection?.lastSyncedAt ? new Date(connectionInfo.connection.lastSyncedAt).toLocaleString() : "Never"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-neutral-400">
+                      Connect your Razorpay Test Key ID & Secret to sync live orders and send payment links.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                {connectionInfo?.connected ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDisconnectRazorpay}
+                    className="w-full text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 cursor-pointer"
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowConnectModal(true)}
+                    className="w-full text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                  >
+                    Connect Razorpay
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Data Sync Card */}
+            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+              <div>
+                <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                  Razorpay Data Sync
+                </span>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Fetch customer records and transaction orders directly from Razorpay APIs.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncingType !== null}
+                  onClick={() => handleSyncData("customers")}
+                  className="text-xs px-2 cursor-pointer"
+                >
+                  {syncingType === "customers" ? "Syncing..." : "Customers"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncingType !== null}
+                  onClick={() => handleSyncData("orders")}
+                  className="text-xs px-2 cursor-pointer"
+                >
+                  {syncingType === "orders" ? "Syncing..." : "Orders"}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={syncingType !== null}
+                  onClick={() => handleSyncData("all")}
+                  className="text-xs px-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 cursor-pointer"
+                >
+                  {syncingType === "all" ? "Syncing..." : "Sync All"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Product Catalog Import Card */}
+            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+              <div>
+                <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                  Product Catalog
+                </span>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Import products with prices and categories using simple CSV ingestion.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCsvModal(true)}
+                  className="w-full text-xs gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Import Product CSV
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1416,6 +1726,175 @@ export default function MerchantDashboard() {
                 </pre>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connect Razorpay Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600">
+                  <Key className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-base text-neutral-900 dark:text-white">
+                  Connect Razorpay Test Mode
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowConnectModal(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-500">
+              Provide your Razorpay Test Key ID and Key Secret. Credentials are encrypted at rest using AES-256-GCM.
+            </p>
+
+            <form onSubmit={handleConnectRazorpay} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
+                  Key ID
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={connectKeyId}
+                  onChange={(e) => setConnectKeyId(e.target.value)}
+                  placeholder="rzp_test_..."
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
+                  Key Secret
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={connectKeySecret}
+                  onChange={(e) => setConnectKeySecret(e.target.value)}
+                  placeholder="••••••••••••••••••••"
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowConnectModal(false)}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={connecting}
+                  size="sm"
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                >
+                  {connecting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Validating with Razorpay...
+                    </>
+                  ) : (
+                    "Save & Connect"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import Product CSV Modal */}
+      {showCsvModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-base text-neutral-900 dark:text-white">
+                  Import Product Catalog (CSV)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowCsvModal(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-500">
+              Paste your CSV content below or load a template. Required columns: <code>name</code>, <code>price</code>.
+            </p>
+
+            <form onSubmit={handleImportCsv} className="space-y-3">
+              <div>
+                <textarea
+                  rows={8}
+                  required
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  placeholder={`name,description,category,price,active\nWireless Mouse,Ergonomic wireless mouse,Accessories,1299,true\nMechanical Keyboard,RGB mechanical keyboard,Accessories,4999,true\n4K Ultra Monitor,32-inch 4K UHD display,Monitors,24999,true`}
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCsvText(
+                      `name,description,category,price,active\nPro Wireless Earbuds,Active noise cancelling earbuds,Audio,3999,true\nSmart Fitness Band,Water resistant fitness tracker,Wearables,2499,true\nFast Wireless Charger,15W Qi fast charging pad,Accessories,999,true`
+                    )
+                  }
+                  className="text-[11px] text-neutral-500"
+                >
+                  Load Sample Template
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCsvModal(false)}
+                    className="text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={importingCsv}
+                    size="sm"
+                    className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                  >
+                    {importingCsv ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      "Import Products"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -52,28 +52,37 @@ async function runAgentOrchestrationTestSuite() {
     }
 
     const opps = analyzeResult.data as Array<{
+      opportunityId: string;
       sourceProductId: string;
       targetProductId: string;
       sourceProductName: string;
       targetProductName: string;
-      eligibleCustomerIds: string[];
+      eligibleCustomerCount: number;
       expectedRevenue: number;
     }>;
 
     console.log(`   Discovered ${opps.length} opportunities from sales analytics.`);
-    const sampleOpp = opps.find((o) => o.eligibleCustomerIds.length > 0) || opps[0];
+    const sampleOpp = opps.find((o) => o.eligibleCustomerCount > 0) || opps[0];
     console.log(`   Target Opportunity: "${sampleOpp.sourceProductName}" → "${sampleOpp.targetProductName}"`);
-    console.log(`   Eligible Customer Count: ${sampleOpp.eligibleCustomerIds.length}`);
+    console.log(`   Eligible Customer Count: ${sampleOpp.eligibleCustomerCount}`);
     console.log("   ✅ analyzeCrossSell tool verified.\n");
 
     // Ensure database Opportunity record exists
     let dbOpportunity = await prisma.opportunity.findFirst({
       where: {
-        merchantId: merchant.id,
-        sourceProductId: sampleOpp.sourceProductId,
-        targetProductId: sampleOpp.targetProductId,
+        id: sampleOpp.opportunityId,
       },
     });
+
+    if (!dbOpportunity) {
+      dbOpportunity = await prisma.opportunity.findFirst({
+        where: {
+          merchantId: merchant.id,
+          sourceProductId: sampleOpp.sourceProductId,
+          targetProductId: sampleOpp.targetProductId,
+        },
+      });
+    }
 
     if (!dbOpportunity) {
       dbOpportunity = await prisma.opportunity.create({
@@ -91,7 +100,28 @@ async function runAgentOrchestrationTestSuite() {
       });
     }
 
-    const eligibleCustomerId = sampleOpp.eligibleCustomerIds[0];
+    // Find verified eligible customer in DB for single customer testing (bought source, NOT target)
+    const eligibleCustomer = await prisma.customer.findFirst({
+      where: {
+        merchantId: merchant.id,
+        orders: {
+          some: {
+            status: "PAID",
+            items: { some: { productId: sampleOpp.sourceProductId } },
+          },
+          none: {
+            status: "PAID",
+            items: { some: { productId: sampleOpp.targetProductId } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!eligibleCustomer) {
+      throw new Error("No eligible customer found for opportunity test");
+    }
+    const eligibleCustomerId = eligibleCustomer.id;
 
     // -------------------------------------------------------------------------
     // TEST 3: isCustomerEligible Verification

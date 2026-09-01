@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGrowthAction } from "@/lib/actions/growth-action";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,16 +9,9 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
     const { id } = await context.params;
-    const { searchParams } = new URL(req.url);
-    const merchantId = searchParams.get("merchantId");
-
-    if (!merchantId) {
-      return NextResponse.json(
-        { error: "merchantId query parameter is required" },
-        { status: 400 }
-      );
-    }
 
     if (!id) {
       return NextResponse.json(
@@ -33,13 +27,16 @@ export async function GET(
 
     if (!action) {
       return NextResponse.json(
-        { error: `GrowthAction '${id}' not found for merchant '${merchantId}'` },
+        { error: `GrowthAction '${id}' not found for merchant` },
         { status: 404 }
       );
     }
 
     return NextResponse.json({ success: true, action }, { status: 200 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to fetch GrowthAction";
     return NextResponse.json({ error: message }, { status: 500 });
   }

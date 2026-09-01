@@ -11,6 +11,7 @@ model Merchant {
   id            String         @id @default(cuid())
   name          String
   email         String         @unique
+  passwordHash  String?
   currency      String         @default("INR")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -19,7 +20,36 @@ model Merchant {
   growthActions GrowthAction[]
   opportunities Opportunity[]
   orders        Order[]
-  products      Product[]
+  products           Product[]
+  sessions           Session[]
+  razorpayConnection RazorpayConnection?
+}
+
+model RazorpayConnection {
+  id                 String    @id @default(cuid())
+  merchantId         String    @unique
+  keyId              String
+  encryptedKeySecret String
+  mode               String    @default("TEST")
+  connectedAt        DateTime  @default(now())
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  merchant           Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  merchantId   String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  merchant     Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([sessionToken])
 }
 
 model Customer {

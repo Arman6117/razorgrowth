@@ -5,14 +5,17 @@ import {
   listGrowthActions,
 } from "@/lib/actions/growth-action";
 import { GrowthActionStatus } from "@/lib/generated/prisma/enums";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
+
+    const body = await req.json().catch(() => ({}));
     const {
-      merchantId,
       opportunityId,
       customerId,
       customerIds,
@@ -21,65 +24,59 @@ export async function POST(req: NextRequest) {
       type,
     } = body;
 
-    if (!merchantId || !opportunityId) {
+    if (!opportunityId) {
       return NextResponse.json(
         {
-          error: "merchantId and opportunityId are required",
+          error: "opportunityId is required",
         },
         { status: 400 }
       );
     }
 
-    // Batch creation mode
-    if (Array.isArray(customerIds)) {
-      if (customerIds.length === 0) {
-        return NextResponse.json(
-          {
-            error: "customerIds must be a non-empty array of customer IDs",
-          },
-          { status: 400 }
-        );
-      }
-
-      const result = await createGrowthActionsForCustomers({
+    // Single action creation mode
+    if (typeof customerId === "string" && customerId.trim()) {
+      const action = await createGrowthAction({
         merchantId,
         opportunityId,
-        customerIds,
+        customerId: customerId.trim(),
         sourceProductId,
         targetProductId,
         type,
       });
 
-      return NextResponse.json(result, { status: 201 });
-    }
-
-    // Single action creation mode
-    if (!customerId) {
       return NextResponse.json(
         {
-          error: "Either customerId (string) or customerIds (array) is required",
+          success: true,
+          action,
+        },
+        { status: 201 }
+      );
+    }
+
+    // Batch creation mode (either explicit customerIds array or omitted for automatic candidate resolution)
+    if (Array.isArray(customerIds) && customerIds.length === 0) {
+      return NextResponse.json(
+        {
+          error: "customerIds must be a non-empty array of customer IDs or omitted for all candidates",
         },
         { status: 400 }
       );
     }
 
-    const action = await createGrowthAction({
+    const result = await createGrowthActionsForCustomers({
       merchantId,
       opportunityId,
-      customerId,
+      customerIds,
       sourceProductId,
       targetProductId,
       type,
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        action,
-      },
-      { status: 201 }
-    );
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to create GrowthAction";
     const status =
       message.includes("not found") ? 404 :
@@ -91,17 +88,12 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
+
     const { searchParams } = new URL(req.url);
-    const merchantId = searchParams.get("merchantId");
     const opportunityId = searchParams.get("opportunityId") || undefined;
     const statusParam = searchParams.get("status");
-
-    if (!merchantId) {
-      return NextResponse.json(
-        { error: "merchantId query parameter is required" },
-        { status: 400 }
-      );
-    }
 
     const status = statusParam ? (statusParam as GrowthActionStatus) : undefined;
 
@@ -113,6 +105,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ success: true, actions }, { status: 200 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to list GrowthActions";
     return NextResponse.json({ error: message }, { status: 500 });
   }

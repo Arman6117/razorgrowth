@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeGrowthAction } from "@/lib/actions/growth-action";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,16 +9,11 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
     const { id } = await context.params;
-    const body = await req.json();
-    const { merchantId, description, callbackUrl, callbackMethod, actor } = body;
-
-    if (!merchantId) {
-      return NextResponse.json(
-        { error: "merchantId is required in request body" },
-        { status: 400 }
-      );
-    }
+    const body = await req.json().catch(() => ({}));
+    const { description, callbackUrl, callbackMethod, actor } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -44,6 +40,9 @@ export async function POST(
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to execute GrowthAction";
     const status =
       message.includes("not found") ? 404 :

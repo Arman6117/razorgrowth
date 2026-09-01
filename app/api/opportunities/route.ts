@@ -2,24 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { analyzeCrossSell } from "@/lib/analytics/cross-sell";
 import { OpportunityType, OpportunityStatus } from "@/lib/generated/prisma/enums";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    let merchantId = searchParams.get("merchantId");
-
-    if (!merchantId) {
-      const defaultMerchant = await prisma.merchant.findFirst({ select: { id: true } });
-      if (!defaultMerchant) {
-        return NextResponse.json(
-          { error: "No merchant found. Run database seed." },
-          { status: 404 }
-        );
-      }
-      merchantId = defaultMerchant.id;
-    }
+    const authMerchant = await requireAuthenticatedMerchant(req);
+    const merchantId = authMerchant.id;
 
     // 1. Run deterministic cross-sell analytics engine
     const crossSellOpportunities = await analyzeCrossSell(merchantId);
@@ -105,6 +95,9 @@ export async function GET(req: NextRequest) {
       opportunities: enrichedOpportunities,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to fetch opportunities";
     return NextResponse.json({ error: message }, { status: 500 });
   }

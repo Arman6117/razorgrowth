@@ -157,6 +157,10 @@ async function runAgentToolsTest() {
 
     // 5. Test Tool: createGrowthAction
     console.log("📝 5. Testing Tool: createGrowthAction...");
+    // Clear any pre-existing action for this opportunity to ensure test idempotency
+    await prisma.auditEvent.deleteMany({ where: { action: { opportunityId: dbOpportunity.id } } });
+    await prisma.growthAction.deleteMany({ where: { opportunityId: dbOpportunity.id } });
+
     const createActionResult = await executeAgentTool("createGrowthAction", {
       merchantId: merchant.id,
       opportunityId: dbOpportunity.id,

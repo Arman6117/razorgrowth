@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handlePaymentLinkWebhook, RazorpayWebhookPayload } from "@/lib/razorpay/webhooks";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,21 +10,16 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authMerchant = await requireAuthenticatedMerchant(req);
     const { id } = await context.params;
-    const body = await req.json().catch(() => ({}));
-    const { merchantId } = body;
 
-    const action = await prisma.growthAction.findUnique({
-      where: { id },
+    const action = await prisma.growthAction.findFirst({
+      where: { id, merchantId: authMerchant.id },
       include: { opportunity: true },
     });
 
     if (!action) {
       return NextResponse.json({ error: `GrowthAction '${id}' not found` }, { status: 404 });
-    }
-
-    if (merchantId && action.merchantId !== merchantId) {
-      return NextResponse.json({ error: "Unauthorized merchant" }, { status: 403 });
     }
 
     const params = (action.parameters || {}) as Record<string, unknown>;
@@ -87,6 +83,9 @@ export async function POST(
     const result = await handlePaymentLinkWebhook(payload);
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to simulate webhook payment";
     return NextResponse.json({ error: message }, { status: 500 });
   }

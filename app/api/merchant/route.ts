@@ -1,48 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const merchantId = searchParams.get("merchantId");
+    const authMerchant = await requireAuthenticatedMerchant(req);
 
-    let merchant;
-    if (merchantId) {
-      merchant = await prisma.merchant.findUnique({
-        where: { id: merchantId },
-        include: {
-          _count: {
-            select: {
-              customers: true,
-              products: true,
-              orders: true,
-              opportunities: true,
-              growthActions: true,
-            },
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: authMerchant.id },
+      include: {
+        _count: {
+          select: {
+            customers: true,
+            products: true,
+            orders: true,
+            opportunities: true,
+            growthActions: true,
           },
         },
-      });
-    } else {
-      merchant = await prisma.merchant.findFirst({
-        include: {
-          _count: {
-            select: {
-              customers: true,
-              products: true,
-              orders: true,
-              opportunities: true,
-              growthActions: true,
-            },
-          },
-        },
-      });
-    }
+      },
+    });
 
     if (!merchant) {
       return NextResponse.json(
-        { error: "No merchant found. Run database seed." },
+        { error: "Merchant not found" },
         { status: 404 }
       );
     }
@@ -82,6 +65,9 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const message = error instanceof Error ? error.message : "Failed to fetch merchant";
     return NextResponse.json({ error: message }, { status: 500 });
   }

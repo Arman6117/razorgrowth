@@ -1,5 +1,5 @@
 import { prisma } from "../prisma";
-import { razorpayRequest } from "./client";
+import { razorpayMerchantRequest } from "./client";
 
 export interface CreatePaymentLinkInput {
   merchantId: string;
@@ -186,8 +186,9 @@ export async function createPaymentLink(
     payload.callback_method = input.callbackMethod || "get";
   }
 
-  // 7. Execute Razorpay API call
-  const response = await razorpayRequest<RazorpayPaymentLinkResponse>(
+  // 7. Execute Razorpay API call with merchant credentials
+  const response = await razorpayMerchantRequest<RazorpayPaymentLinkResponse>(
+    merchant.id,
     "/payment_links",
     {
       method: "POST",

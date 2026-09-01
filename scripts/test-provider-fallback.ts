@@ -310,13 +310,18 @@ async function runProviderFallbackTestSuite() {
     console.log("🌐 Test I: Testing End-to-End /api/agent Route Handler Invocation...");
     const { POST: agentRoutePOST } = await import("../app/api/agent/route");
     const { NextRequest } = await import("next/server");
+    const { createSession } = await import("../lib/auth/session");
+
+    const testSession = await createSession(merchant.id);
 
     const tStartRoute = Date.now();
     const routeReq = new NextRequest("http://localhost:3000/api/agent", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `razorgrowth_session=${testSession.sessionToken}`,
+      },
       body: JSON.stringify({
-        merchantId: merchant.id,
         message: "Find top cross sell opportunities and prepare actions",
       }),
     });
