@@ -201,41 +201,34 @@ async function runAgentOrchestrationTestSuite() {
     console.log("   ✅ Malformed & unauthorized requests fail safely with validation errors.\n");
 
     // -------------------------------------------------------------------------
-    // TEST 8: Real LLM Orchestrator Execution
+    // TEST 8: Real LLM Orchestrator Execution & Fallback Resilience
     // -------------------------------------------------------------------------
-    console.log(`[${new Date().toISOString()}] 🤖 8. Testing Real LLM Orchestrator Execution...`);
+    console.log(`[${new Date().toISOString()}] 🤖 8. Testing Real LLM Orchestrator Execution & Provider Fallback...`);
     const apiKeyPresent =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+      process.env.OPENROUTER_API_KEY ||
       process.env.OPENAI_API_KEY;
 
     if (apiKeyPresent) {
       console.log(`[${new Date().toISOString()}]    LLM API key detected. Running live LLM tool calling test (Model: ${process.env.AGENT_MODEL || "gemini-3.5-flash"})...`);
       const t0 = Date.now();
-      let orchestratorRes = await runAgentOrchestrator({
+      const orchestratorRes = await runAgentOrchestrator({
         merchantId: merchant.id,
         message: "Find good cross-sell opportunities for my customers and create actions for eligible customers.",
       });
-      console.log(`[${new Date().toISOString()}]    First runAgentOrchestrator finished in ${Date.now() - t0}ms.`);
-      console.log(`   Success: ${orchestratorRes.success}, error: ${orchestratorRes.error || "none"}`);
-
-      // Handle momentary free-tier API rate limits gracefully with backoff
-      if (!orchestratorRes.success && orchestratorRes.error?.includes("Quota exceeded")) {
-        console.log(`[${new Date().toISOString()}]    ⏳ Rate limit reached. Waiting 15s for cooldown before retry...`);
-        await new Promise((r) => setTimeout(r, 15000));
-        const t1 = Date.now();
-        console.log(`[${new Date().toISOString()}]    Retrying runAgentOrchestrator...`);
-        orchestratorRes = await runAgentOrchestrator({
-          merchantId: merchant.id,
-          message: "Find good cross-sell opportunities for my customers and create actions for eligible customers.",
-        });
-        console.log(`[${new Date().toISOString()}]    Second runAgentOrchestrator finished in ${Date.now() - t1}ms.`);
+      console.log(`[${new Date().toISOString()}]    runAgentOrchestrator finished in ${Date.now() - t0}ms.`);
+      console.log(`   Success         : ${orchestratorRes.success}`);
+      console.log(`   Provider Used   : ${orchestratorRes.provider || "unknown"}`);
+      console.log(`   Model Used      : ${orchestratorRes.model || "unknown"}`);
+      console.log(`   Fallback Active : ${orchestratorRes.fallbackOccurred || false}`);
+      if (orchestratorRes.fallbackReason) {
+        console.log(`   Fallback Reason : ${orchestratorRes.fallbackReason.slice(0, 100)}...`);
       }
-
-      console.log(`   Success: ${orchestratorRes.success}`);
-      console.log(`   Summary: ${orchestratorRes.summary.slice(0, 140)}...`);
-      console.log(`   Tools Called: ${orchestratorRes.toolCalls.map((t) => t.toolName).join(" → ")}`);
-      console.log(`   Actions Created: ${orchestratorRes.actionsCreated.length}`);
+      console.log(`   Total Attempts  : ${orchestratorRes.attemptCount || 1}`);
+      console.log(`   Summary         : ${orchestratorRes.summary?.slice(0, 140)}...`);
+      console.log(`   Tools Called    : ${orchestratorRes.toolCalls.map((t) => t.toolName).join(" → ")}`);
+      console.log(`   Actions Created : ${orchestratorRes.actionsCreated.length}`);
 
       if (Array.isArray(orchestratorRes.actionsCreated)) {
         for (const act of orchestratorRes.actionsCreated) {

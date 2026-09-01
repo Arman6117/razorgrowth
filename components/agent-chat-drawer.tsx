@@ -23,6 +23,9 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 
 export interface ToolCallSummary {
   toolName: string;
@@ -78,6 +81,161 @@ interface AgentChatDrawerProps {
   merchantName?: string;
   onRefreshDashboard?: () => void;
 }
+
+function normalizeMarkdownContent(text: string): string {
+  if (!text) return "";
+  return text
+    // Replace LaTeX arrows with unicode arrows
+    .replace(/\$\\rightarrow\$/g, "→")
+    .replace(/\$\\longrightarrow\$/g, "⟶")
+    .replace(/\$\\to\$/g, "→")
+    .replace(/\$\\leftarrow\$/g, "←")
+    .replace(/\$\\longleftarrow\$/g, "⟵")
+    .replace(/\$\\Rightarrow\$/g, "⇒")
+    .replace(/\$\\Leftarrow\$/g, "⇐")
+    .replace(/\$\\leftrightarrow\$/g, "↔")
+    .replace(/\$\\Leftrightarrow\$/g, "⇔")
+    .replace(/\$\\implies\$/g, "⇒")
+    .replace(/\$\\iff\$/g, "⇔")
+    .replace(/\\rightarrow\b/g, "→")
+    .replace(/\\longrightarrow\b/g, "⟶")
+    .replace(/\\leftarrow\b/g, "←")
+    .replace(/\\longleftarrow\b/g, "⟵")
+    .replace(/\\Rightarrow\b/g, "⇒")
+    .replace(/\\Leftarrow\b/g, "⇐")
+    .replace(/\\leftrightarrow\b/g, "↔")
+    .replace(/\\Leftrightarrow\b/g, "⇔")
+    .replace(/\\implies\b/g, "⇒")
+    .replace(/\\iff\b/g, "⇔");
+}
+
+const markdownComponents: Components = {
+  h1: ({ children, ...props }) => (
+    <h1 className="text-base font-bold mt-3 mb-1.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2 className="text-sm font-bold mt-2.5 mb-1 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3 className="text-sm font-semibold mt-2 mb-1 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h3>
+  ),
+  h4: ({ children, ...props }) => (
+    <h4 className="text-xs font-semibold mt-1.5 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h4>
+  ),
+  h5: ({ children, ...props }) => (
+    <h5 className="text-xs font-semibold mt-1 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children, ...props }) => (
+    <h6 className="text-xs font-semibold mt-1 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
+      {children}
+    </h6>
+  ),
+  p: ({ children, ...props }) => (
+    <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
+      {children}
+    </p>
+  ),
+  strong: ({ children, ...props }) => (
+    <strong className="font-semibold text-neutral-900 dark:text-neutral-100" {...props}>
+      {children}
+    </strong>
+  ),
+  em: ({ children, ...props }) => (
+    <em className="italic" {...props}>
+      {children}
+    </em>
+  ),
+  ul: ({ children, ...props }) => (
+    <ul className="list-disc pl-5 my-2 space-y-1" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="list-decimal pl-5 my-2 space-y-1" {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }) => (
+    <li className="leading-relaxed" {...props}>
+      {children}
+    </li>
+  ),
+  a: ({ children, href, ...props }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 underline hover:underline underline-offset-2 break-all"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  pre: ({ children, ...props }) => (
+    <pre
+      className="p-3 my-2 rounded-lg bg-neutral-900 dark:bg-black text-neutral-100 font-mono text-xs overflow-x-auto border border-neutral-800"
+      {...props}
+    >
+      {children}
+    </pre>
+  ),
+  code: ({ className, children, ...props }) => {
+    const isBlock = className?.includes("language-");
+    if (isBlock) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code
+        className="px-1.5 py-0.5 rounded bg-neutral-200/80 dark:bg-neutral-700/80 font-mono text-[12px] text-neutral-800 dark:text-neutral-200"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  blockquote: ({ children, ...props }) => (
+    <blockquote
+      className="border-l-2 border-purple-500 pl-3 my-2 italic text-neutral-600 dark:text-neutral-300"
+      {...props}
+    >
+      {children}
+    </blockquote>
+  ),
+  hr: ({ ...props }) => (
+    <hr className="my-3 border-neutral-200 dark:border-neutral-700" {...props} />
+  ),
+  table: ({ children, ...props }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="min-w-full divide-y divide-neutral-200 dark:divide-neutral-700 text-xs text-left" {...props}>
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children, ...props }) => (
+    <th className="px-2.5 py-1.5 font-semibold bg-neutral-200/50 dark:bg-neutral-800 text-neutral-900 dark:text-white" {...props}>
+      {children}
+    </th>
+  ),
+  td: ({ children, ...props }) => (
+    <td className="px-2.5 py-1.5 border-t border-neutral-200 dark:border-neutral-700" {...props}>
+      {children}
+    </td>
+  ),
+};
 
 const EXAMPLE_PROMPTS = [
   "Find the best cross-sell opportunity.",
@@ -332,9 +490,20 @@ export function AgentChatDrawer({
                   }`}
                 >
                   {/* Message Main Body */}
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
-                    {msg.text}
-                  </div>
+                  {isUser ? (
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                      {msg.text}
+                    </div>
+                  ) : (
+                    <div className="text-sm leading-relaxed font-sans">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={markdownComponents}
+                      >
+                        {normalizeMarkdownContent(msg.text)}
+                      </ReactMarkdown>
+                    </div>
+                  )}
 
                   {/* High-Level Structured Batch Action Summary (Requirement 5) */}
                   {!isUser && (hasCreatedActions || batchCreatedCount > 0) && (

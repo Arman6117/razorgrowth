@@ -470,142 +470,237 @@ export async function createGrowthActionsForCustomers(
   }
   const amountInPaise = Math.round(priceInRupees * 100);
 
-  // 6. Resolve customer list (deduplicate input array if provided)
+  // 6. Resolve customer list:
+  // If customerIds is explicitly provided, use them.
+  // Otherwise, automatically resolve all candidate customers who purchased sourceProductId.
   let candidateCustomerIds: string[] = [];
   if (input.customerIds && Array.isArray(input.customerIds)) {
-    candidateCustomerIds = Array.from(new Set(input.customerIds.map((id) => id?.trim()).filter(Boolean)));
+    candidateCustomerIds = Array.from(
+      new Set(input.customerIds.map((id) => id?.trim()).filter(Boolean))
+    );
+  } else {
+    if (sourceProductId) {
+      const sourceOrders = await prisma.order.findMany({
+        where: {
+          merchantId,
+          status: "PAID",
+          items: {
+            some: { productId: sourceProductId },
+          },
+        },
+        select: { customerId: true },
+        distinct: ["customerId"],
+      });
+      candidateCustomerIds = sourceOrders.map((o) => o.customerId);
+    } else {
+      const allCustomers = await prisma.customer.findMany({
+        where: { merchantId },
+        select: { id: true },
+      });
+      candidateCustomerIds = allCustomers.map((c) => c.id);
+    }
   }
 
   const actionType = input.type || GrowthActionType.CREATE_PAYMENT_LINK;
   const createdActions: GrowthActionModel[] = [];
   const actionIds: string[] = [];
   const skippedCustomers: SkippedCustomerInfo[] = [];
-  let createdCount = 0;
   let duplicateCount = 0;
   let rejectedCount = 0;
 
-  for (const customerId of candidateCustomerIds) {
-    try {
-      // Validate customer belongs to merchant
-      const customer = await prisma.customer.findFirst({
-        where: { id: customerId, merchantId },
-        select: { id: true, name: true, email: true },
-      });
+  if (candidateCustomerIds.length === 0) {
+    return {
+      success: true,
+      createdCount: 0,
+      duplicateCount: 0,
+      rejectedCount: 0,
+      actionIds: [],
+      skippedCustomers: [],
+      createdActions: [],
+    };
+  }
 
-      if (!customer) {
-        skippedCustomers.push({
-          customerId,
-          reason: `Customer not found or does not belong to merchant: ${customerId}`,
-          type: "NOT_FOUND",
-        });
-        rejectedCount++;
-        continue;
-      }
+  // 1. Batch lookup for all candidate customers belonging to this merchant
+  const foundCustomers = await prisma.customer.findMany({
+    where: {
+      id: { in: candidateCustomerIds },
+      merchantId,
+    },
+    select: { id: true, name: true, email: true },
+  });
+  const customerMap = new Map(foundCustomers.map((c) => [c.id, c]));
 
-      // Check existing duplicate actions
-      const existingAction = await duplicateActionCheck({
-        merchantId,
-        opportunityId,
-        customerId,
-      });
+  // 2. Batch lookup for existing active and executed actions for this opportunity
+  const existingActions = await prisma.growthAction.findMany({
+    where: {
+      merchantId,
+      opportunityId,
+      status: {
+        in: [
+          GrowthActionStatus.PENDING_APPROVAL,
+          GrowthActionStatus.APPROVED,
+          GrowthActionStatus.EXECUTING,
+          GrowthActionStatus.EXECUTED,
+        ],
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      parameters: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-      if (existingAction) {
-        if (existingAction.status === GrowthActionStatus.EXECUTED) {
-          skippedCustomers.push({
-            customerId,
-            reason: `Customer '${customer.name}' has already completed and paid for this opportunity (GrowthAction: ${existingAction.id})`,
-            type: "DUPLICATE",
-          });
-          duplicateCount++;
-          continue;
-        } else {
-          // Active in-flight action (PENDING_APPROVAL, APPROVED, EXECUTING)
-          skippedCustomers.push({
-            customerId,
-            reason: `Active action already exists for customer '${customer.name}' in status '${existingAction.status}' (GrowthAction: ${existingAction.id})`,
-            type: "DUPLICATE",
-          });
-          duplicateCount++;
-          continue;
-        }
-      }
-
-      // Enforce customer eligibility
-      const eligible = await isCustomerEligible({
-        merchantId,
-        customerId,
-        sourceProductId: sourceProductId || undefined,
-        targetProductId: targetProduct.id,
-        opportunityId,
-      });
-
-      if (!eligible) {
-        skippedCustomers.push({
-          customerId,
-          reason: `Customer '${customer.name}' is not eligible for this opportunity`,
-          type: "INELIGIBLE",
-        });
-        rejectedCount++;
-        continue;
-      }
-
-      // Create GrowthAction atomically with AuditEvent
-      const action = await prisma.$transaction(async (tx) => {
-        const created = await tx.growthAction.create({
-          data: {
-            merchantId,
-            opportunityId,
-            type: actionType,
-            status: GrowthActionStatus.PENDING_APPROVAL,
-            parameters: {
-              customerId: customer.id,
-              customerName: customer.name,
-              customerEmail: customer.email,
-              targetProductId: targetProduct.id,
-              targetProductName: targetProduct.name,
-              sourceProductId: sourceProductId,
-              amountInRupees: priceInRupees,
-              amountInPaise: amountInPaise,
-              currency: merchant.currency || "INR",
-            },
-          },
-        });
-
-        await tx.auditEvent.create({
-          data: {
-            merchantId,
-            actionId: created.id,
-            eventType: "GROWTH_ACTION_CREATED",
-            actor: AuditActor.AGENT,
-            metadata: {
-              actionId: created.id,
-              opportunityId,
-              customerId: customer.id,
-              targetProductId: targetProduct.id,
-              amountInRupees: priceInRupees,
-              amountInPaise,
-              currency: merchant.currency || "INR",
-              createdAt: new Date().toISOString(),
-              batch: true,
-            },
-          },
-        });
-
-        return created;
-      });
-
-      createdActions.push(action);
-      actionIds.push(action.id);
-      createdCount++;
-    } catch (customerError) {
-      skippedCustomers.push({
-        customerId,
-        reason: customerError instanceof Error ? customerError.message : String(customerError),
-        type: "ERROR",
-      });
-      rejectedCount++;
+  const existingActionByCustomer = new Map<string, { id: string; status: GrowthActionStatus }>();
+  for (const act of existingActions) {
+    const params = act.parameters as Record<string, unknown> | null;
+    const custId = params?.customerId as string | undefined;
+    if (custId && !existingActionByCustomer.has(custId)) {
+      existingActionByCustomer.set(custId, { id: act.id, status: act.status });
     }
   }
+
+  // 3. Batch check for customer order eligibility
+  let sourceBuyerIds = new Set<string>();
+  if (sourceProductId) {
+    const sourceOrders = await prisma.order.findMany({
+      where: {
+        merchantId,
+        customerId: { in: candidateCustomerIds },
+        status: "PAID",
+        items: {
+          some: { productId: sourceProductId },
+        },
+      },
+      select: { customerId: true },
+    });
+    sourceBuyerIds = new Set(sourceOrders.map((o) => o.customerId));
+  }
+
+  const targetOrders = await prisma.order.findMany({
+    where: {
+      merchantId,
+      customerId: { in: candidateCustomerIds },
+      status: "PAID",
+      items: {
+        some: { productId: targetProductId },
+      },
+    },
+    select: { customerId: true },
+  });
+  const targetBuyerIds = new Set(targetOrders.map((o) => o.customerId));
+
+  // 4. In-memory validation and categorization of each candidate
+  const validCustomers: Array<{ id: string; name: string; email: string }> = [];
+
+  for (const customerId of candidateCustomerIds) {
+    const customer = customerMap.get(customerId);
+    if (!customer) {
+      skippedCustomers.push({
+        customerId,
+        reason: `Customer not found or does not belong to merchant: ${customerId}`,
+        type: "NOT_FOUND",
+      });
+      rejectedCount++;
+      continue;
+    }
+
+    const existingAction = existingActionByCustomer.get(customerId);
+    if (existingAction) {
+      if (existingAction.status === GrowthActionStatus.EXECUTED) {
+        skippedCustomers.push({
+          customerId,
+          reason: `Customer '${customer.name}' has already completed and paid for this opportunity (GrowthAction: ${existingAction.id})`,
+          type: "DUPLICATE",
+        });
+        duplicateCount++;
+        continue;
+      } else {
+        skippedCustomers.push({
+          customerId,
+          reason: `Active action already exists for customer '${customer.name}' in status '${existingAction.status}' (GrowthAction: ${existingAction.id})`,
+          type: "DUPLICATE",
+        });
+        duplicateCount++;
+        continue;
+      }
+    }
+
+    const isEligible = (sourceProductId ? sourceBuyerIds.has(customerId) : true) && !targetBuyerIds.has(customerId);
+    if (!isEligible) {
+      skippedCustomers.push({
+        customerId,
+        reason: `Customer '${customer.name}' is not eligible for this opportunity`,
+        type: "INELIGIBLE",
+      });
+      rejectedCount++;
+      continue;
+    }
+
+    validCustomers.push(customer);
+  }
+
+  // 5. Batch insert valid GrowthActions and AuditEvents atomically
+  if (validCustomers.length > 0) {
+    const actionsData = validCustomers.map((customer) => ({
+      merchantId,
+      opportunityId,
+      type: actionType,
+      status: GrowthActionStatus.PENDING_APPROVAL,
+      parameters: {
+        customerId: customer.id,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        targetProductId: targetProduct.id,
+        targetProductName: targetProduct.name,
+        sourceProductId: sourceProductId,
+        amountInRupees: priceInRupees,
+        amountInPaise: amountInPaise,
+        currency: merchant.currency || "INR",
+      },
+    }));
+
+    const batchCreated = await prisma.$transaction(async (tx) => {
+      const actions = await tx.growthAction.createManyAndReturn({
+        data: actionsData,
+      });
+
+      const auditData = actions.map((action) => {
+        const params = action.parameters as Record<string, unknown>;
+        return {
+          merchantId,
+          actionId: action.id,
+          eventType: "GROWTH_ACTION_CREATED",
+          actor: AuditActor.AGENT,
+          metadata: {
+            actionId: action.id,
+            opportunityId,
+            customerId: String(params.customerId || ""),
+            targetProductId: targetProduct.id,
+            amountInRupees: priceInRupees,
+            amountInPaise,
+            currency: merchant.currency || "INR",
+            createdAt: new Date().toISOString(),
+            batch: true,
+          },
+        };
+      });
+
+      await tx.auditEvent.createMany({
+        data: auditData,
+      });
+
+      return actions;
+    });
+
+    for (const action of batchCreated) {
+      createdActions.push(action);
+      actionIds.push(action.id);
+    }
+  }
+
+  const createdCount = createdActions.length;
 
   return {
     success: true,

@@ -33,11 +33,12 @@ async function runAgentToolsTest() {
     console.log(`   Success: ${analyzeResult.success}`);
     console.log(`   Message: ${analyzeResult.message}`);
     const opps = analyzeResult.data as Array<{
+      opportunityId: string;
       sourceProductName: string;
       targetProductName: string;
-      eligibleCustomerIds: string[];
-      targetProductId: string;
       sourceProductId: string;
+      targetProductId: string;
+      eligibleCustomerCount: number;
       expectedRevenue: number;
     }>;
 
@@ -45,18 +46,31 @@ async function runAgentToolsTest() {
       throw new Error("analyzeCrossSell tool failed or returned empty opportunities");
     }
     console.log(`   Discovered: ${opps.length} opportunities from transaction graph.`);
-    const sampleOpp = opps.find((o) => o.eligibleCustomerIds.length > 0) || opps[0];
-    console.log(`   Selected Pair: ${sampleOpp.sourceProductName} → ${sampleOpp.targetProductName}`);
-    console.log("   ✅ analyzeCrossSell tool passed.\n");
+    const sampleOpp = opps.find((o) => o.eligibleCustomerCount > 0) || opps[0];
+    console.log(`   Selected Pair: ${sampleOpp.sourceProductName} → ${sampleOpp.targetProductName} (Eligible Count: ${sampleOpp.eligibleCustomerCount})`);
+
+    // Verify contract: analyzeCrossSell must NOT return eligibleCustomerIds to the LLM
+    if ("eligibleCustomerIds" in sampleOpp) {
+      throw new Error("analyzeCrossSell must NOT return raw eligibleCustomerIds to the LLM");
+    }
+    console.log("   ✅ analyzeCrossSell tool passed with compact schema (no raw customer ID arrays).\n");
 
     // Ensure database Opportunity record exists for testing
     let dbOpportunity = await prisma.opportunity.findFirst({
       where: {
-        merchantId: merchant.id,
-        sourceProductId: sampleOpp.sourceProductId,
-        targetProductId: sampleOpp.targetProductId,
+        id: sampleOpp.opportunityId,
       },
     });
+
+    if (!dbOpportunity) {
+      dbOpportunity = await prisma.opportunity.findFirst({
+        where: {
+          merchantId: merchant.id,
+          sourceProductId: sampleOpp.sourceProductId,
+          targetProductId: sampleOpp.targetProductId,
+        },
+      });
+    }
 
     if (!dbOpportunity) {
       dbOpportunity = await prisma.opportunity.create({
@@ -74,7 +88,28 @@ async function runAgentToolsTest() {
       });
     }
 
-    const eligibleCustomerId = sampleOpp.eligibleCustomerIds[0];
+    // Find verified eligible customer in DB for single customer testing (bought source, NOT target)
+    const eligibleCustomer = await prisma.customer.findFirst({
+      where: {
+        merchantId: merchant.id,
+        orders: {
+          some: {
+            status: "PAID",
+            items: { some: { productId: sampleOpp.sourceProductId } },
+          },
+          none: {
+            status: "PAID",
+            items: { some: { productId: sampleOpp.targetProductId } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!eligibleCustomer) {
+      throw new Error("No eligible customer found for opportunity test");
+    }
+    const eligibleCustomerId = eligibleCustomer.id;
 
     // 3. Test Tool: isCustomerEligible (Eligible Customer)
     console.log("🛡️ 3. Testing Tool: isCustomerEligible (Eligible Customer)...");
@@ -152,34 +187,31 @@ async function runAgentToolsTest() {
     }
     console.log("   ✅ createGrowthAction tool passed with authoritative pricing and guardrails.\n");
 
-    // 6. Test Tool: createGrowthActionsForCustomers (Batch creation)
-    console.log("📦 6. Testing Tool: createGrowthActionsForCustomers (Batch Creation)...");
-    if (sampleOpp.eligibleCustomerIds.length > 1) {
-      const batchResult = await executeAgentTool("createGrowthActionsForCustomers", {
-        merchantId: merchant.id,
-        opportunityId: dbOpportunity.id,
-        customerIds: sampleOpp.eligibleCustomerIds,
-        sourceProductId: sampleOpp.sourceProductId,
-        targetProductId: sampleOpp.targetProductId,
-      });
+    // 6. Test Tool: createGrowthActionsForCustomers (Automatic customer resolution via merchantId + opportunityId)
+    console.log("📦 6. Testing Tool: createGrowthActionsForCustomers (Bulk Creation with Automatic Customer Resolution)...");
+    const batchResult = await executeAgentTool("createGrowthActionsForCustomers", {
+      merchantId: merchant.id,
+      opportunityId: dbOpportunity.id,
+      sourceProductId: sampleOpp.sourceProductId,
+      targetProductId: sampleOpp.targetProductId,
+    });
 
-      console.log(`   Success: ${batchResult.success}`);
-      console.log(`   Message: ${batchResult.message}`);
-      const batchData = batchResult.data as {
-        createdCount: number;
-        duplicateCount: number;
-        rejectedCount: number;
-        actionIds: string[];
-      };
+    console.log(`   Success: ${batchResult.success}`);
+    console.log(`   Message: ${batchResult.message}`);
+    const batchData = batchResult.data as {
+      createdCount: number;
+      duplicateCount: number;
+      rejectedCount: number;
+      actionIds: string[];
+    };
 
-      if (!batchResult.success || !Array.isArray(batchData.actionIds)) {
-        throw new Error(`createGrowthActionsForCustomers failed: ${batchResult.error}`);
-      }
-
-      createdActionIds.push(...batchData.actionIds);
-      console.log(`   Batch Created: ${batchData.createdCount}, Duplicates: ${batchData.duplicateCount}, Rejected: ${batchData.rejectedCount}`);
-      console.log("   ✅ createGrowthActionsForCustomers tool passed.\n");
+    if (!batchResult.success || !Array.isArray(batchData.actionIds)) {
+      throw new Error(`createGrowthActionsForCustomers failed: ${batchResult.error}`);
     }
+
+    createdActionIds.push(...batchData.actionIds);
+    console.log(`   Batch Created: ${batchData.createdCount}, Duplicates: ${batchData.duplicateCount}, Rejected: ${batchData.rejectedCount}`);
+    console.log("   ✅ createGrowthActionsForCustomers tool passed with automatic customer resolution.\n");
 
     // 7. Test Tool: approveGrowthAction
     console.log("👍 7. Testing Tool: approveGrowthAction...");

@@ -41,15 +41,30 @@ export interface ToolDefinition {
   };
 }
 
+export interface CompactCrossSellOpportunity {
+  opportunityId: string;
+  sourceProductId: string;
+  sourceProductName: string;
+  targetProductId: string;
+  targetProductName: string;
+  targetProductPrice: number;
+  sourceCustomers: number;
+  customersTogether: number;
+  eligibleCustomerCount: number;
+  crossSellRate: number;
+  expectedRevenue: number;
+}
+
 /**
  * Tool 1: analyzeCrossSellTool
  *
  * Runs the deterministic cross-sell analytics engine on verified merchant transaction data.
- * Resolves product pairs, cross-sell conversion rates, eligible customer lists, and expected revenue.
+ * Resolves product pairs, cross-sell conversion rates, eligible customer counts, and expected revenue.
+ * Returns compact opportunity summaries without sending huge raw customer ID arrays to the LLM.
  */
 export async function analyzeCrossSellTool(input: {
   merchantId: string;
-}): Promise<AgentToolResponse<CrossSellOpportunity[]>> {
+}): Promise<AgentToolResponse<CompactCrossSellOpportunity[]>> {
   if (!input.merchantId?.trim()) {
     return {
       success: false,
@@ -72,13 +87,75 @@ export async function analyzeCrossSellTool(input: {
     };
   }
 
-  const opportunities = await analyzeCrossSell(merchant.id);
+  const rawOpportunities = await analyzeCrossSell(merchant.id);
+
+  // Sync / resolve persisted Opportunity IDs from database
+  const persistedOpps = await prisma.opportunity.findMany({
+    where: { merchantId: merchant.id },
+    select: { id: true, sourceProductId: true, targetProductId: true },
+  });
+
+  const oppMap = new Map<string, string>();
+  for (const p of persistedOpps) {
+    if (p.sourceProductId && p.targetProductId) {
+      oppMap.set(`${p.sourceProductId}:${p.targetProductId}`, p.id);
+    }
+  }
+
+  const compactOpportunities: CompactCrossSellOpportunity[] = [];
+
+  for (const opp of rawOpportunities) {
+    const key = `${opp.sourceProductId}:${opp.targetProductId}`;
+    let opportunityId = oppMap.get(key);
+
+    if (!opportunityId) {
+      const created = await prisma.opportunity.create({
+        data: {
+          merchantId: merchant.id,
+          type: OpportunityType.CROSS_SELL,
+          title: `Cross-sell: ${opp.sourceProductName} → ${opp.targetProductName}`,
+          description: `Identified ${opp.eligibleCustomerCount} eligible customers who purchased ${opp.sourceProductName} but not yet ${opp.targetProductName}.`,
+          sourceProductId: opp.sourceProductId,
+          targetProductId: opp.targetProductId,
+          confidence: opp.crossSellRate,
+          estimatedRevenue: opp.expectedRevenue,
+          evidence: {
+            sourceProductName: opp.sourceProductName,
+            targetProductName: opp.targetProductName,
+            sourceCustomers: opp.sourceCustomers,
+            customersTogether: opp.customersTogether,
+            eligibleCustomerCount: opp.eligibleCustomerCount,
+            crossSellRate: opp.crossSellRate,
+            expectedRevenue: opp.expectedRevenue,
+          },
+          status: OpportunityStatus.APPROVED,
+        },
+        select: { id: true },
+      });
+      opportunityId = created.id;
+      oppMap.set(key, opportunityId);
+    }
+
+    compactOpportunities.push({
+      opportunityId,
+      sourceProductId: opp.sourceProductId,
+      sourceProductName: opp.sourceProductName,
+      targetProductId: opp.targetProductId,
+      targetProductName: opp.targetProductName,
+      targetProductPrice: opp.targetProductPrice,
+      sourceCustomers: opp.sourceCustomers,
+      customersTogether: opp.customersTogether,
+      eligibleCustomerCount: opp.eligibleCustomerCount,
+      crossSellRate: opp.crossSellRate,
+      expectedRevenue: opp.expectedRevenue,
+    });
+  }
 
   return {
     success: true,
     toolName: "analyzeCrossSell",
-    data: opportunities,
-    message: `Discovered ${opportunities.length} revenue opportunities from transaction patterns.`,
+    data: compactOpportunities,
+    message: `Discovered ${compactOpportunities.length} revenue opportunities from transaction patterns.`,
   };
 }
 
@@ -108,52 +185,126 @@ export async function isCustomerEligibleTool(input: {
   }
 
   // Authoritative validation of merchant & customer ownership
-  const customer = await prisma.customer.findFirst({
-    where: { id: customerId, merchantId },
-    select: { id: true, name: true, email: true },
-  });
+  const [merchant, customer, targetProduct] = await Promise.all([
+    prisma.merchant.findUnique({ where: { id: merchantId }, select: { id: true } }),
+    prisma.customer.findFirst({ where: { id: customerId, merchantId }, select: { id: true, name: true } }),
+    prisma.product.findFirst({ where: { id: targetProductId, merchantId }, select: { id: true, name: true, active: true } }),
+  ]);
+
+  if (!merchant) {
+    return {
+      success: false,
+      toolName: "isCustomerEligible",
+      error: `Merchant not found with ID: ${merchantId}`,
+    };
+  }
 
   if (!customer) {
     return {
       success: false,
       toolName: "isCustomerEligible",
-      error: `Customer not found or does not belong to merchant: ${customerId}`,
+      error: `Customer not found with ID: ${customerId} for merchant: ${merchantId}`,
     };
   }
 
-  const eligible = await isCustomerEligible({
-    merchantId,
-    customerId,
-    sourceProductId,
-    targetProductId,
-    opportunityId,
+  if (!targetProduct) {
+    return {
+      success: false,
+      toolName: "isCustomerEligible",
+      error: `Target product not found with ID: ${targetProductId}`,
+    };
+  }
+
+  if (!targetProduct.active) {
+    return {
+      success: false,
+      toolName: "isCustomerEligible",
+      error: `Target product '${targetProduct.name}' is inactive`,
+    };
+  }
+
+  // Resolve sourceProductId from opportunity if not passed
+  let resolvedSourceProductId = sourceProductId;
+  if (!resolvedSourceProductId && opportunityId) {
+    const opp = await prisma.opportunity.findFirst({
+      where: { id: opportunityId, merchantId },
+      select: { sourceProductId: true },
+    });
+    resolvedSourceProductId = opp?.sourceProductId || undefined;
+  }
+
+  // 1. If sourceProductId provided, verify customer bought source product in a PAID order
+  if (resolvedSourceProductId) {
+    const sourceOrder = await prisma.order.findFirst({
+      where: {
+        merchantId,
+        customerId,
+        status: "PAID",
+        items: {
+          some: {
+            productId: resolvedSourceProductId,
+          },
+        },
+      },
+    });
+
+    if (!sourceOrder) {
+      return {
+        success: true,
+        toolName: "isCustomerEligible",
+        data: {
+          eligible: false,
+          customerId,
+          targetProductId,
+        },
+        message: `Customer ${customer.name} is not eligible: has not purchased source product.`,
+      };
+    }
+  }
+
+  // 2. Verify customer has NOT bought target product in any PAID order
+  const targetOrder = await prisma.order.findFirst({
+    where: {
+      merchantId,
+      customerId,
+      status: "PAID",
+      items: {
+        some: {
+          productId: targetProductId,
+        },
+      },
+    },
   });
+
+  if (targetOrder) {
+    return {
+      success: true,
+      toolName: "isCustomerEligible",
+      data: {
+        eligible: false,
+        customerId,
+        targetProductId,
+      },
+      message: `Customer ${customer.name} is not eligible: already purchased target product.`,
+    };
+  }
 
   return {
     success: true,
     toolName: "isCustomerEligible",
     data: {
-      eligible,
+      eligible: true,
       customerId,
       targetProductId,
     },
-    message: eligible
-      ? `Customer ${customer.name} (${customer.email}) is eligible for target product offer.`
-      : `Customer ${customer.name} (${customer.email}) is NOT eligible (already purchased target product or missing prerequisite purchase).`,
+    message: `Customer ${customer.name} is verified eligible for cross-sell to ${targetProduct.name}.`,
   };
 }
 
 /**
  * Tool 3: createGrowthActionTool
  *
- * Creates a GrowthAction in PENDING_APPROVAL status.
- *
- * STRICT SAFETY BOUNDARIES:
- * - The LLM CANNOT invent prices or amounts. Target product price is strictly resolved from Prisma.
- * - Requires existing Opportunity and Customer in database.
- * - Validates customer eligibility server-side.
- * - Prevents duplicate active actions.
- * - Records GROWTH_ACTION_CREATED in AuditEvent.
+ * Creates a GrowthAction in PENDING_APPROVAL status for an individual eligible customer.
  */
 export async function createGrowthActionTool(input: {
   merchantId: string;
@@ -196,8 +347,9 @@ export async function createGrowthActionTool(input: {
         customerEmail: params.customerEmail,
         amountInRupees: params.amountInRupees,
         amountInPaise: params.amountInPaise,
+        linkUrl: params.linkUrl as string | undefined,
       },
-      message: `GrowthAction created with status '${action.status}'. Financial actions require merchant approval before execution.`,
+      message: `GrowthAction ${action.id} created in 'PENDING_APPROVAL' status for customer ${params.customerName}. Action requires merchant approval before payment link is sent.`,
     };
   } catch (error) {
     return {
@@ -211,18 +363,13 @@ export async function createGrowthActionTool(input: {
 /**
  * Tool 3b: createGrowthActionsForCustomersTool
  *
- * Creates GrowthActions in bulk for a list of eligible customers in PENDING_APPROVAL status.
- *
- * STRICT SAFETY BOUNDARIES:
- * - Authoritative target product price is strictly resolved from Prisma DB.
- * - Customer eligibility is deterministically checked for each customer.
- * - Duplicate protection prevents multiple in-flight actions or duplicate billing for EXECUTED actions.
- * - Records individual GROWTH_ACTION_CREATED AuditEvents.
+ * Creates GrowthActions in bulk (CREATE_PAYMENT_LINK) in PENDING_APPROVAL status for eligible customers.
+ * If customerIds is omitted, the deterministic backend automatically resolves all eligible customers.
  */
 export async function createGrowthActionsForCustomersTool(input: {
   merchantId: string;
   opportunityId: string;
-  customerIds: string[];
+  customerIds?: string[];
   sourceProductId?: string;
   targetProductId?: string;
 }): Promise<AgentToolResponse> {
@@ -233,14 +380,6 @@ export async function createGrowthActionsForCustomersTool(input: {
       success: false,
       toolName: "createGrowthActionsForCustomers",
       error: "merchantId and opportunityId are required parameters",
-    };
-  }
-
-  if (!Array.isArray(customerIds) || customerIds.length === 0) {
-    return {
-      success: false,
-      toolName: "createGrowthActionsForCustomers",
-      error: "customerIds must be a non-empty array of customer IDs",
     };
   }
 
@@ -470,7 +609,7 @@ export const agentToolDefinitions: ToolDefinition[] = [
   {
     name: "createGrowthActionsForCustomers",
     description:
-      "Creates GrowthActions in bulk (CREATE_PAYMENT_LINK) in PENDING_APPROVAL status for a list of eligible customers of an opportunity. Prices are resolved authoritatively from DB. The AI CANNOT approve or execute financial actions.",
+      "Creates GrowthActions in bulk (CREATE_PAYMENT_LINK) in PENDING_APPROVAL status for eligible customers of an opportunity. If customerIds is omitted, the deterministic backend automatically targets all eligible customers. Prices are resolved authoritatively from DB. The AI CANNOT approve or execute financial actions.",
     parameters: {
       type: "object",
       properties: {
@@ -485,7 +624,8 @@ export const agentToolDefinitions: ToolDefinition[] = [
         customerIds: {
           type: "array",
           items: { type: "string" },
-          description: "Array of eligible customer IDs.",
+          description:
+            "Optional explicit array of customer IDs. If omitted, all eligible customers for this opportunity are targeted automatically.",
         },
         targetProductId: {
           type: "string",
@@ -496,7 +636,7 @@ export const agentToolDefinitions: ToolDefinition[] = [
           description: "Source product identifier (optional if opportunity specified).",
         },
       },
-      required: ["merchantId", "opportunityId", "customerIds"],
+      required: ["merchantId", "opportunityId"],
     },
   },
   {
@@ -574,7 +714,7 @@ export async function executeAgentTool(
       return createGrowthActionsForCustomersTool({
         merchantId: toolInput.merchantId as string,
         opportunityId: toolInput.opportunityId as string,
-        customerIds: toolInput.customerIds as string[],
+        customerIds: toolInput.customerIds as string[] | undefined,
         sourceProductId: toolInput.sourceProductId as string | undefined,
         targetProductId: toolInput.targetProductId as string | undefined,
       });
