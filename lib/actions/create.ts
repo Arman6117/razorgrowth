@@ -59,10 +59,11 @@ export async function createGrowthAction(
 
   const actionType = input.type || GrowthActionType.CREATE_PAYMENT_LINK;
 
-  return await prisma.$transaction(async (tx) => {
-    // Acquire database-level transaction lock on this merchant + opportunity scope
-    const lockKey = `growth_action_opp_lock:${merchantId}:${opportunityId}`;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+  return await prisma.$transaction(
+    async (tx) => {
+      // Acquire database-level transaction lock on this merchant + opportunity scope
+      const lockKey = `growth_action_opp_lock:${merchantId}:${opportunityId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
 
     // 4. Validate customer belongs to merchant
     const customer = await tx.customer.findFirst({
@@ -149,7 +150,7 @@ export async function createGrowthAction(
     });
 
     return createdAction;
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }
 
 /**
@@ -433,5 +434,5 @@ export async function createGrowthActionsForCustomers(
       skippedCustomers,
       createdActions,
     };
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }

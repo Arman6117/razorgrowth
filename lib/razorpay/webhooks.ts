@@ -476,5 +476,5 @@ export async function handlePaymentLinkWebhook(
       actionId: growthAction.id,
       message: `Payment confirmed for GrowthAction ${growthAction.id}. Status updated to EXECUTED.`,
     };
-  });
+  }, { timeout: 20000, maxWait: 20000 });
 }

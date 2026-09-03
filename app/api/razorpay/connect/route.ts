@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
 import { encryptSecret } from "@/lib/crypto/encryption";
 import { razorpayRequestWithCredentials } from "@/lib/razorpay/client";
+import { RazorpayCustomerListResponseSchema } from "@/lib/razorpay/schemas";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +30,15 @@ export async function POST(req: NextRequest) {
     const trimmedKeyId = keyId.trim();
     const trimmedKeySecret = keySecret.trim();
 
-    // 1. Validate credentials with a harmless live call to Razorpay API
+    // 1. Validate credentials with a live call to Razorpay API
     try {
       await razorpayRequestWithCredentials(
         { keyId: trimmedKeyId, keySecret: trimmedKeySecret },
-        "/customers?count=1"
+        "/customers?count=1",
+        {
+          method: "GET",
+          schema: RazorpayCustomerListResponseSchema,
+        }
       );
     } catch (err) {
       console.warn("Razorpay credential validation failed for merchant", authMerchant.id);

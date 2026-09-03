@@ -7,7 +7,7 @@ import {
 import {
   createPaymentLink,
 } from "../razorpay/payment-links";
-import { RazorpayApiError } from "../razorpay/client";
+import { RazorpayApiError, RazorpayRequestError } from "../razorpay/client";
 import {
   ValidationError,
   NotFoundError,
@@ -326,7 +326,7 @@ export async function executeGrowthAction(
     let errorField: string | undefined;
     let statusCode: number | undefined;
 
-    if (err instanceof RazorpayApiError) {
+    if (err instanceof RazorpayRequestError) {
       errorCode = err.code;
       errorDescription = err.description;
       errorField = err.field;

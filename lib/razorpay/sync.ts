@@ -1,44 +1,29 @@
 import { prisma } from "../prisma";
 import { razorpayMerchantRequest } from "./client";
 import { OrderStatus } from "../generated/prisma/enums";
+import {
+  RazorpayCustomerListResponseSchema,
+  RazorpayOrderListResponseSchema,
+} from "./schemas";
+import type {
+  RazorpayCustomerItem,
+  RazorpayCustomerListResponse,
+  RazorpayOrderItem,
+  RazorpayOrderListResponse,
+} from "./schemas";
 
-export interface RazorpayCustomerItem {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  contact?: string | null;
-  created_at: number;
-}
-
-export interface RazorpayCustomerListResponse {
-  entity: string;
-  count: number;
-  items: RazorpayCustomerItem[];
-}
-
-export interface RazorpayOrderItem {
-  id: string;
-  entity: string;
-  amount: number;
-  amount_paid: number;
-  amount_due: number;
-  currency: string;
-  receipt?: string | null;
-  status: "created" | "attempted" | "paid";
-  notes?: Record<string, string>;
-  created_at: number;
-}
-
-export interface RazorpayOrderListResponse {
-  entity: string;
-  count: number;
-  items: RazorpayOrderItem[];
-}
+export type {
+  RazorpayCustomerItem,
+  RazorpayCustomerListResponse,
+  RazorpayOrderItem,
+  RazorpayOrderListResponse,
+};
 
 /**
  * Synchronizes customer records from Razorpay Customers API into local database.
  * Scoped strictly to the specified merchantId.
  * Idempotent: uses upsert on unique([merchantId, email]).
+ * Runtime validates Razorpay response shape.
  */
 export async function syncCustomers(merchantId: string) {
   let skip = 0;
@@ -50,7 +35,11 @@ export async function syncCustomers(merchantId: string) {
   while (true) {
     const response = await razorpayMerchantRequest<RazorpayCustomerListResponse>(
       merchantId,
-      `/customers?count=${count}&skip=${skip}`
+      `/customers?count=${count}&skip=${skip}`,
+      {
+        method: "GET",
+        schema: RazorpayCustomerListResponseSchema,
+      }
     );
 
     const items = response.items || [];
@@ -59,8 +48,11 @@ export async function syncCustomers(merchantId: string) {
     totalFound += items.length;
 
     for (const item of items) {
-      const email = (item.email?.trim() || "").toLowerCase() ||
-        (item.contact ? `${item.contact}@customer.razorpay` : `cust_${item.id.slice(-8)}@customer.razorpay`);
+      const email =
+        (item.email?.trim() || "").toLowerCase() ||
+        (item.contact
+          ? `${item.contact}@customer.razorpay`
+          : `cust_${item.id.slice(-8)}@customer.razorpay`);
       const name = item.name?.trim() || "Razorpay Customer";
 
       const existing = await prisma.customer.findUnique({
@@ -105,6 +97,7 @@ export async function syncCustomers(merchantId: string) {
 /**
  * Synchronizes transaction/order-level data from Razorpay Orders API into local database.
  * Scoped strictly to the specified merchantId.
+ * Runtime validates Razorpay response shape.
  */
 export async function syncOrders(merchantId: string) {
   let skip = 0;
@@ -130,7 +123,11 @@ export async function syncOrders(merchantId: string) {
   while (true) {
     const response = await razorpayMerchantRequest<RazorpayOrderListResponse>(
       merchantId,
-      `/orders?count=${count}&skip=${skip}`
+      `/orders?count=${count}&skip=${skip}`,
+      {
+        method: "GET",
+        schema: RazorpayOrderListResponseSchema,
+      }
     );
 
     const items = response.items || [];
@@ -144,7 +141,13 @@ export async function syncOrders(merchantId: string) {
       // Check if notes contain customerId or customerEmail
       const notes = item.notes || {};
       const noteCustomerId = notes.customerId?.trim();
-      const noteEmail = (notes.customerEmail || notes.email || "").trim().toLowerCase();
+      const noteEmail = (
+        notes.customerEmail ||
+        notes.email ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
 
       if (noteCustomerId) {
         const found = await prisma.customer.findFirst({

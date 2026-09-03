@@ -1,5 +1,15 @@
 import { prisma } from "../prisma";
 import { razorpayMerchantRequest } from "./client";
+import {
+  RazorpayPaymentLinkResponseSchema,
+  RazorpayNotifyResponseSchema,
+} from "./schemas";
+import type {
+  RazorpayPaymentLinkResponse,
+  RazorpayNotifyResponse,
+} from "./schemas";
+
+export type { RazorpayPaymentLinkResponse, RazorpayNotifyResponse };
 
 export interface CreatePaymentLinkInput {
   merchantId: string;
@@ -10,25 +20,6 @@ export interface CreatePaymentLinkInput {
   description?: string;
   callbackUrl?: string;
   callbackMethod?: "get" | "post";
-}
-
-export interface RazorpayPaymentLinkResponse {
-  id: string;
-  entity: string;
-  amount: number;
-  amount_paid: number;
-  currency: string;
-  status: string;
-  description: string;
-  short_url: string;
-  customer?: {
-    name?: string;
-    email?: string;
-    contact?: string;
-  };
-  notes?: Record<string, string>;
-  created_at: number;
-  expire_by?: number;
 }
 
 export interface PaymentLinkResult {
@@ -55,6 +46,7 @@ export interface PaymentLinkResult {
  * 3. Validates that the customer exists and belongs to the merchant.
  * 4. Ensures the amount is positive and currency is valid.
  * 5. Embeds internal IDs in Razorpay `notes` for end-to-end reconciliation.
+ * 6. Validates external Razorpay response at runtime using Zod.
  */
 export async function createPaymentLink(
   input: CreatePaymentLinkInput
@@ -186,13 +178,14 @@ export async function createPaymentLink(
     payload.callback_method = input.callbackMethod || "get";
   }
 
-  // 7. Execute Razorpay API call with merchant credentials
+  // 7. Execute Razorpay API call with merchant credentials and validate response schema
   const response = await razorpayMerchantRequest<RazorpayPaymentLinkResponse>(
     merchant.id,
     "/payment_links",
     {
       method: "POST",
       body: payload,
+      schema: RazorpayPaymentLinkResponseSchema,
     }
   );
 
@@ -218,11 +211,6 @@ export interface ResendPaymentLinkNotificationInput {
   medium?: "email" | "sms";
 }
 
-export interface RazorpayNotifyResponse {
-  success: boolean;
-  [key: string]: unknown;
-}
-
 /**
  * Resends a payment link notification to the customer via Razorpay's native notification API.
  * POST https://api.razorpay.com/v1/payment_links/:id/notify_by/:medium
@@ -246,9 +234,9 @@ export async function resendPaymentLinkNotification(
     endpoint,
     {
       method: "POST",
+      schema: RazorpayNotifyResponseSchema,
     }
   );
 
   return response;
 }
-
