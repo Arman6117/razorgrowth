@@ -14,6 +14,7 @@ import {
   InactiveProductError,
   IneligibleCustomerError,
   DuplicateActionError,
+  InvalidStateTransitionError,
 } from "./errors";
 import { assertCanExecute } from "./state-machine";
 import { isCustomerEligible } from "./eligibility";
@@ -32,11 +33,13 @@ import type {
  *     - APPROVED → EXECUTING
  *     - FAILED (retry) → EXECUTING
  * - Idempotency protection: EXECUTED actions CANNOT be executed again.
+ * - Race-safe: Database conditional update ensures only ONE concurrent request can transition
+ *   the action to EXECUTING. Concurrent duplicate execution requests fail cleanly.
  * - Calling on FAILED records an ACTION_RETRY audit event.
  * - Re-runs authoritative customer, product, and eligibility guardrails.
  * - Calls Razorpay Payment Link API (test mode).
  * - Stores payment link data into GrowthAction.parameters.
- * - Records PAYMENT_LINK_CREATED AuditEvent.
+ * - Records PAYMENT_LINK_CREATED and PAYMENT_LINK_DELIVERED AuditEvents.
  * - On API failure: Transitions status to FAILED and records detailed GROWTH_ACTION_FAILED AuditEvent,
  *   including explicit explanations if Razorpay Test Mode maximum transaction limits are exceeded.
  * - Final transition to EXECUTED happens upon verified payment_link.paid webhook (or if markAsExecuted is requested).
@@ -61,56 +64,86 @@ export async function executeGrowthAction(
     throw new ValidationError("actionId is required");
   }
 
-  // 1. Fetch authoritative GrowthAction
-  const growthAction = await prisma.growthAction.findFirst({
-    where: { id: actionId, merchantId },
-    include: { opportunity: true },
-  });
+  // 1. Atomically transition status to EXECUTING with conditional update
+  const { isRetry, growthAction } = await prisma.$transaction(async (tx) => {
+    // Check initial state
+    const action = await tx.growthAction.findFirst({
+      where: { id: actionId, merchantId },
+      include: { opportunity: true },
+    });
 
-  if (!growthAction) {
-    throw new NotFoundError(
-      `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
-    );
-  }
+    if (!action) {
+      throw new NotFoundError(
+        `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
+      );
+    }
 
-  // 2. State machine enforcement & Idempotency guard
-  assertCanExecute(growthAction.status, actionId);
+    assertCanExecute(action.status, actionId);
 
-  if (growthAction.type !== GrowthActionType.CREATE_PAYMENT_LINK) {
-    throw new ValidationError(
-      `Unsupported GrowthAction type for execution: '${growthAction.type}'`
-    );
-  }
+    if (action.type !== GrowthActionType.CREATE_PAYMENT_LINK) {
+      throw new ValidationError(
+        `Unsupported GrowthAction type for execution: '${action.type}'`
+      );
+    }
 
-  const isRetry = growthAction.status === GrowthActionStatus.FAILED;
-  const executionActor =
-    actor || (isRetry ? AuditActor.MERCHANT : AuditActor.SYSTEM);
+    const isRetry = action.status === GrowthActionStatus.FAILED;
+    const expectedPreviousStatus = action.status; // Either APPROVED or FAILED
+    const executionActor =
+      actor || (isRetry ? AuditActor.MERCHANT : AuditActor.SYSTEM);
 
-  // 3. Mark status as EXECUTING and record ACTION_RETRY audit event if retrying
-  await prisma.$transaction(async (tx) => {
-    await tx.growthAction.update({
-      where: { id: growthAction.id },
+    // Conditional atomic update: only update if still in expectedPreviousStatus!
+    const updateResult = await tx.growthAction.updateMany({
+      where: {
+        id: actionId,
+        merchantId,
+        status: expectedPreviousStatus,
+      },
       data: {
         status: GrowthActionStatus.EXECUTING,
       },
     });
 
+    if (updateResult.count === 0) {
+      // A concurrent request changed the status before our update
+      const freshAction = await tx.growthAction.findFirst({
+        where: { id: actionId, merchantId },
+      });
+
+      if (!freshAction) {
+        throw new NotFoundError(
+          `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
+        );
+      }
+
+      assertCanExecute(freshAction.status, actionId);
+
+      throw new InvalidStateTransitionError(
+        `Cannot execute GrowthAction in status '${freshAction.status}'. Allowed statuses: APPROVED, FAILED.`
+      );
+    }
+
+    // Record ACTION_RETRY audit event if retrying (atomic with the status transition)
     if (isRetry) {
       await tx.auditEvent.create({
         data: {
           merchantId,
-          actionId: growthAction.id,
+          actionId: action.id,
           eventType: "ACTION_RETRY",
           actor: executionActor,
           metadata: {
-            actionId: growthAction.id,
-            opportunityId: growthAction.opportunityId,
+            actionId: action.id,
+            opportunityId: action.opportunityId,
             previousStatus: GrowthActionStatus.FAILED,
             retriedAt: new Date().toISOString(),
           },
         },
       });
     }
+
+    return {
+      isRetry,
+      growthAction: action,
+    };
   });
 
   try {

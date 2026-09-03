@@ -7,12 +7,13 @@ import type { GrowthActionModel } from "../generated/prisma/models/GrowthAction"
 import {
   ValidationError,
   NotFoundError,
+  InvalidStateTransitionError,
 } from "./errors";
 import { assertCanReject } from "./state-machine";
 import type { RejectGrowthActionInput } from "./types";
 
 /**
- * Rejects a PENDING_APPROVAL or APPROVED GrowthAction.
+ * Rejects a PENDING_APPROVAL or APPROVED GrowthAction atomically and race-safely.
  */
 export async function rejectGrowthAction(
   input: RejectGrowthActionInput
@@ -26,25 +27,50 @@ export async function rejectGrowthAction(
     throw new ValidationError("actionId is required");
   }
 
-  const growthAction = await prisma.growthAction.findFirst({
-    where: { id: actionId, merchantId },
-  });
+  return await prisma.$transaction(async (tx) => {
+    const growthAction = await tx.growthAction.findFirst({
+      where: { id: actionId, merchantId },
+    });
 
-  if (!growthAction) {
-    throw new NotFoundError(
-      `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
-    );
-  }
+    if (!growthAction) {
+      throw new NotFoundError(
+        `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
+      );
+    }
 
-  assertCanReject(growthAction.status);
+    assertCanReject(growthAction.status);
 
-  const updatedAction = await prisma.$transaction(async (tx) => {
-    const updated = await tx.growthAction.update({
-      where: { id: growthAction.id },
+    const expectedPreviousStatus = growthAction.status;
+
+    // Conditional atomic update
+    const updateResult = await tx.growthAction.updateMany({
+      where: {
+        id: actionId,
+        merchantId,
+        status: expectedPreviousStatus,
+      },
       data: {
         status: GrowthActionStatus.REJECTED,
       },
     });
+
+    if (updateResult.count === 0) {
+      const freshAction = await tx.growthAction.findFirst({
+        where: { id: actionId, merchantId },
+      });
+
+      if (!freshAction) {
+        throw new NotFoundError(
+          `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
+        );
+      }
+
+      assertCanReject(freshAction.status);
+
+      throw new InvalidStateTransitionError(
+        `Cannot reject GrowthAction in status '${freshAction.status}'`
+      );
+    }
 
     await tx.auditEvent.create({
       data: {
@@ -59,8 +85,10 @@ export async function rejectGrowthAction(
       },
     });
 
-    return updated;
-  });
+    const updated = await tx.growthAction.findFirst({
+      where: { id: actionId, merchantId },
+    });
 
-  return updatedAction;
+    return updated!;
+  });
 }
