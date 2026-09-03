@@ -14,6 +14,11 @@ import {
   OpportunityType,
   OpportunityStatus,
 } from "../generated/prisma/enums";
+import {
+  generateGrowthPlan,
+  prepareGrowthPlanActions,
+  resolveEligibleCustomersForOpportunity,
+} from "./growth-planner";
 
 export interface AgentToolResponse<T = unknown> {
   success: boolean;
@@ -526,6 +531,239 @@ export async function getGrowthActionStatusTool(input: {
 }
 
 /**
+ * Tool 6: getGrowthOpportunitiesTool
+ * Returns verified growth opportunities for the merchant.
+ */
+export async function getGrowthOpportunitiesTool(input: {
+  merchantId: string;
+}): Promise<AgentToolResponse> {
+  if (!input.merchantId?.trim()) {
+    return {
+      success: false,
+      toolName: "getGrowthOpportunities",
+      error: "merchantId parameter is required",
+    };
+  }
+
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: input.merchantId },
+    select: { id: true, name: true },
+  });
+
+  if (!merchant) {
+    return {
+      success: false,
+      toolName: "getGrowthOpportunities",
+      error: `Merchant not found with ID: ${input.merchantId}`,
+    };
+  }
+
+  let opps = await prisma.opportunity.findMany({
+    where: { merchantId: merchant.id },
+    include: {
+      sourceProduct: { select: { id: true, name: true, price: true } },
+      targetProduct: { select: { id: true, name: true, price: true, active: true } },
+    },
+    orderBy: { estimatedRevenue: "desc" },
+  });
+
+  if (opps.length === 0) {
+    await analyzeCrossSellTool({ merchantId: merchant.id });
+    opps = await prisma.opportunity.findMany({
+      where: { merchantId: merchant.id },
+      include: {
+        sourceProduct: { select: { id: true, name: true, price: true } },
+        targetProduct: { select: { id: true, name: true, price: true, active: true } },
+      },
+      orderBy: { estimatedRevenue: "desc" },
+    });
+  }
+
+  const compact = opps.map((o) => ({
+    opportunityId: o.id,
+    strategy: o.type,
+    title: o.title,
+    sourceProduct: o.sourceProduct?.name || null,
+    targetProduct: o.targetProduct?.name || "Target Product",
+    targetProductPrice: Number(o.targetProduct?.price || 0),
+    confidence: Number(o.confidence),
+    estimatedRevenue: Number(o.estimatedRevenue),
+    status: o.status,
+  }));
+
+  return {
+    success: true,
+    toolName: "getGrowthOpportunities",
+    data: compact,
+    message: `Retrieved ${compact.length} verified growth opportunities for merchant.`,
+  };
+}
+
+/**
+ * Tool 7: inspectOpportunityEvidenceTool
+ * Returns deterministic evidence for a selected opportunity.
+ */
+export async function inspectOpportunityEvidenceTool(input: {
+  merchantId: string;
+  opportunityId: string;
+}): Promise<AgentToolResponse> {
+  const { merchantId, opportunityId } = input;
+  if (!merchantId?.trim() || !opportunityId?.trim()) {
+    return {
+      success: false,
+      toolName: "inspectOpportunityEvidence",
+      error: "merchantId and opportunityId are required parameters",
+    };
+  }
+
+  try {
+    const resolved = await resolveEligibleCustomersForOpportunity({
+      merchantId,
+      opportunityId,
+    });
+
+    return {
+      success: true,
+      toolName: "inspectOpportunityEvidence",
+      data: {
+        opportunityId: resolved.opportunity.id,
+        strategy: resolved.opportunity.type,
+        title: resolved.opportunity.title,
+        sourceProduct: resolved.sourceProduct,
+        targetProduct: resolved.targetProduct,
+        sourceBuyersCount: resolved.sourceBuyersCount,
+        coPurchasersCount: resolved.coPurchasersCount,
+        observedAttachRate: resolved.observedAttachRate,
+        eligibleCustomerCount: resolved.eligibleCustomerIds.length,
+        authoritativeTargetPrice: resolved.targetProduct.price,
+        evidence: resolved.opportunity.evidence,
+      },
+      message: `Deterministic evidence inspected for ${resolved.opportunity.title}: ${resolved.sourceBuyersCount} buyers, ${resolved.coPurchasersCount} co-purchasers, ${resolved.eligibleCustomerIds.length} eligible remaining.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      toolName: "inspectOpportunityEvidence",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Tool 8: resolveEligibleCustomersTool
+ * Resolves the real customer population using backend eligibility rules.
+ */
+export async function resolveEligibleCustomersTool(input: {
+  merchantId: string;
+  opportunityId: string;
+}): Promise<AgentToolResponse> {
+  const { merchantId, opportunityId } = input;
+  if (!merchantId?.trim() || !opportunityId?.trim()) {
+    return {
+      success: false,
+      toolName: "resolveEligibleCustomers",
+      error: "merchantId and opportunityId are required parameters",
+    };
+  }
+
+  try {
+    const resolved = await resolveEligibleCustomersForOpportunity({
+      merchantId,
+      opportunityId,
+    });
+
+    return {
+      success: true,
+      toolName: "resolveEligibleCustomers",
+      data: {
+        opportunityId: resolved.opportunity.id,
+        targetProductId: resolved.targetProduct.id,
+        targetProductName: resolved.targetProduct.name,
+        targetProductPrice: resolved.targetProduct.price,
+        eligibleCustomerCount: resolved.eligibleCustomers.length,
+        eligibleCustomers: resolved.eligibleCustomers,
+      },
+      message: `Resolved ${resolved.eligibleCustomers.length} backend-verified eligible customers for ${resolved.opportunity.title}.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      toolName: "resolveEligibleCustomers",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Tool 9: recommendGrowthActionTool
+ * Produces a structured growth plan recommendation grounded in backend facts.
+ */
+export async function recommendGrowthActionTool(input: {
+  merchantId: string;
+  opportunityId: string;
+}): Promise<AgentToolResponse> {
+  const { merchantId, opportunityId } = input;
+  if (!merchantId?.trim() || !opportunityId?.trim()) {
+    return {
+      success: false,
+      toolName: "recommendGrowthAction",
+      error: "merchantId and opportunityId are required parameters",
+    };
+  }
+
+  try {
+    const plan = await generateGrowthPlan({ merchantId, opportunityId });
+    return {
+      success: true,
+      toolName: "recommendGrowthAction",
+      data: plan,
+      message: `Generated growth plan recommendation: '${plan.title}' targeting ${plan.eligibleCustomerCount} customers (Estimated Value: ₹${plan.estimatedValue}). Requires merchant approval.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      toolName: "recommendGrowthAction",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Tool 10: prepareGrowthActionsTool
+ * Creates PENDING_APPROVAL GrowthActions using existing bulk creation logic.
+ * The AI agent NEVER approves or executes actions.
+ */
+export async function prepareGrowthActionsTool(input: {
+  merchantId: string;
+  opportunityId: string;
+}): Promise<AgentToolResponse> {
+  const { merchantId, opportunityId } = input;
+  if (!merchantId?.trim() || !opportunityId?.trim()) {
+    return {
+      success: false,
+      toolName: "prepareGrowthActions",
+      error: "merchantId and opportunityId are required parameters",
+    };
+  }
+
+  try {
+    const prepResult = await prepareGrowthPlanActions({ merchantId, opportunityId });
+    return {
+      success: true,
+      toolName: "prepareGrowthActions",
+      data: prepResult,
+      message: prepResult.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      toolName: "prepareGrowthActions",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * Standard JSON Schema declarations for LLM Function / Tool Calling.
  */
 export const agentToolDefinitions: ToolDefinition[] = [
@@ -542,6 +780,97 @@ export const agentToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ["merchantId"],
+    },
+  },
+  {
+    name: "getGrowthOpportunities",
+    description:
+      "Returns verified merchant growth opportunities with authoritative estimated revenues, strategies, and confidence scores.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+      },
+      required: ["merchantId"],
+    },
+  },
+  {
+    name: "inspectOpportunityEvidence",
+    description:
+      "Returns deterministic co-purchase facts, attach rates, sample sizes, and authoritative prices for a selected opportunity.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+        opportunityId: {
+          type: "string",
+          description: "Opportunity identifier to inspect.",
+        },
+      },
+      required: ["merchantId", "opportunityId"],
+    },
+  },
+  {
+    name: "resolveEligibleCustomers",
+    description:
+      "Uses backend deterministic eligibility rules to resolve the real target customer population for an opportunity.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+        opportunityId: {
+          type: "string",
+          description: "Opportunity identifier.",
+        },
+      },
+      required: ["merchantId", "opportunityId"],
+    },
+  },
+  {
+    name: "recommendGrowthAction",
+    description:
+      "Produces a structured, evidence-backed growth plan recommendation for an opportunity. Requires merchant approval before execution.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+        opportunityId: {
+          type: "string",
+          description: "Opportunity identifier to formulate recommendation for.",
+        },
+      },
+      required: ["merchantId", "opportunityId"],
+    },
+  },
+  {
+    name: "prepareGrowthActions",
+    description:
+      "Prepares GrowthActions in PENDING_APPROVAL status for all eligible customers of an opportunity. The AI agent CANNOT approve or execute financial actions.",
+    parameters: {
+      type: "object",
+      properties: {
+        merchantId: {
+          type: "string",
+          description: "Authoritative merchant identifier.",
+        },
+        opportunityId: {
+          type: "string",
+          description: "Opportunity identifier to prepare actions for.",
+        },
+      },
+      required: ["merchantId", "opportunityId"],
     },
   },
   {
@@ -692,6 +1021,35 @@ export async function executeAgentTool(
         merchantId: toolInput.merchantId as string,
       });
 
+    case "getGrowthOpportunities":
+      return getGrowthOpportunitiesTool({
+        merchantId: toolInput.merchantId as string,
+      });
+
+    case "inspectOpportunityEvidence":
+      return inspectOpportunityEvidenceTool({
+        merchantId: toolInput.merchantId as string,
+        opportunityId: toolInput.opportunityId as string,
+      });
+
+    case "resolveEligibleCustomers":
+      return resolveEligibleCustomersTool({
+        merchantId: toolInput.merchantId as string,
+        opportunityId: toolInput.opportunityId as string,
+      });
+
+    case "recommendGrowthAction":
+      return recommendGrowthActionTool({
+        merchantId: toolInput.merchantId as string,
+        opportunityId: toolInput.opportunityId as string,
+      });
+
+    case "prepareGrowthActions":
+      return prepareGrowthActionsTool({
+        merchantId: toolInput.merchantId as string,
+        opportunityId: toolInput.opportunityId as string,
+      });
+
     case "isCustomerEligible":
       return isCustomerEligibleTool({
         merchantId: toolInput.merchantId as string,
@@ -739,3 +1097,4 @@ export async function executeAgentTool(
       };
   }
 }
+

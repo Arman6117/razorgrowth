@@ -1,0 +1,66 @@
+import { prisma } from "../prisma";
+import {
+  GrowthActionStatus,
+  AuditActor,
+} from "../generated/prisma/enums";
+import type { GrowthActionModel } from "../generated/prisma/models/GrowthAction";
+import {
+  ValidationError,
+  NotFoundError,
+} from "./errors";
+import { assertCanReject } from "./state-machine";
+import type { RejectGrowthActionInput } from "./types";
+
+/**
+ * Rejects a PENDING_APPROVAL or APPROVED GrowthAction.
+ */
+export async function rejectGrowthAction(
+  input: RejectGrowthActionInput
+): Promise<GrowthActionModel> {
+  const { merchantId, actionId, reason } = input;
+
+  if (!merchantId?.trim()) {
+    throw new ValidationError("merchantId is required");
+  }
+  if (!actionId?.trim()) {
+    throw new ValidationError("actionId is required");
+  }
+
+  const growthAction = await prisma.growthAction.findFirst({
+    where: { id: actionId, merchantId },
+  });
+
+  if (!growthAction) {
+    throw new NotFoundError(
+      `GrowthAction '${actionId}' not found for merchant '${merchantId}'`
+    );
+  }
+
+  assertCanReject(growthAction.status);
+
+  const updatedAction = await prisma.$transaction(async (tx) => {
+    const updated = await tx.growthAction.update({
+      where: { id: growthAction.id },
+      data: {
+        status: GrowthActionStatus.REJECTED,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        merchantId,
+        actionId: growthAction.id,
+        eventType: "GROWTH_ACTION_REJECTED",
+        actor: AuditActor.MERCHANT,
+        metadata: {
+          reason: reason || "Merchant rejected the action",
+          rejectedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    return updated;
+  });
+
+  return updatedAction;
+}

@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Layers,
   Award,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -91,6 +92,7 @@ interface GrowthIntelligencePanelProps {
   analyzing: boolean;
   onRunAnalysis: () => Promise<void>;
   onSelectOpportunity: (opportunityId: string) => void;
+  onPlanOpportunity?: (opportunityId: string) => void;
   aiEnhanced?: boolean;
 }
 
@@ -100,6 +102,7 @@ export function GrowthIntelligencePanel({
   analyzing,
   onRunAnalysis,
   onSelectOpportunity,
+  onPlanOpportunity,
   aiEnhanced = false,
 }: GrowthIntelligencePanelProps) {
   const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
@@ -328,6 +331,18 @@ export function GrowthIntelligencePanel({
                           </>
                         )}
                       </Button>
+
+                      {opp.id && onPlanOpportunity && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onPlanOpportunity(opp.id!)}
+                          className="border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-xs font-semibold gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                          Plan Campaign
+                        </Button>
+                      )}
 
                       {opp.id && (
                         <Button

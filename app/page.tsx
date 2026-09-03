@@ -40,6 +40,9 @@ import {
   RankedOpportunityItem,
   GrowthSnapshotData,
 } from "@/components/growth-intelligence-panel";
+import { AgenticGrowthPlanner } from "@/components/agentic-growth-planner";
+import { AIBuyerReadinessCard } from "@/components/ai-buyer-readiness";
+import { AIBuyerPreviewModal } from "@/components/ai-buyer-preview-modal";
 
 interface MerchantInfo {
   id: string;
@@ -170,6 +173,22 @@ export default function MerchantDashboard() {
   const [analyzingGrowth, setAnalyzingGrowth] = useState(false);
   const [growthAiEnhanced, setGrowthAiEnhanced] = useState(false);
 
+  // AI Agentic Growth Planner state (Phase 4)
+  const [selectedPlannerOpportunityId, setSelectedPlannerOpportunityId] = useState<string | null>(null);
+
+  // AI Buyer Readiness state (Phase 5)
+  const [showAIBuyerModal, setShowAIBuyerModal] = useState(false);
+
+  const handlePlanOpportunity = (opportunityId: string) => {
+    setSelectedPlannerOpportunityId(opportunityId);
+    setTimeout(() => {
+      const el = document.getElementById("growth-planner-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+  };
+
   const showToast = (type: "success" | "error" | "info", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 5000);
@@ -223,6 +242,9 @@ export default function MerchantDashboard() {
       if (oppsRes.ok) {
         const data = await oppsRes.json();
         setOpportunities(data.opportunities || []);
+        if (data.opportunities && data.opportunities.length > 0) {
+          setSelectedPlannerOpportunityId((prev) => prev || data.opportunities[0]?.id || null);
+        }
       }
 
       if (connRes.ok) {
@@ -258,6 +280,9 @@ export default function MerchantDashboard() {
       setGrowthSnapshot(data.snapshot);
       setRankedOpportunities(data.opportunities || []);
       setGrowthAiEnhanced(Boolean(data.aiEnhanced));
+      if (data.opportunities && data.opportunities.length > 0) {
+        setSelectedPlannerOpportunityId(data.opportunities[0].id);
+      }
       showToast(
         "success",
         data.message || `AI Growth Intelligence discovered ${data.opportunities?.length || 0} opportunities!`
@@ -1194,6 +1219,12 @@ export default function MerchantDashboard() {
           </div>
         </div>
 
+        {/* AI Buyer Readiness Section (Phase 5) */}
+        <AIBuyerReadinessCard
+          onOpenPreview={() => setShowAIBuyerModal(true)}
+          onImportCsv={() => setShowCsvModal(true)}
+        />
+
         {/* AI Growth Intelligence Section (Phase 3) */}
         <GrowthIntelligencePanel
           opportunities={displayRankedOpportunities}
@@ -1201,8 +1232,25 @@ export default function MerchantDashboard() {
           analyzing={analyzingGrowth}
           onRunAnalysis={handleRunGrowthAnalysis}
           onSelectOpportunity={handleSelectOpportunityById}
+          onPlanOpportunity={handlePlanOpportunity}
           aiEnhanced={growthAiEnhanced}
         />
+
+        {/* AI Agentic Growth Planner Section (Phase 4) */}
+        {selectedPlannerOpportunityId && (
+          <div id="growth-planner-section" className="scroll-mt-6">
+            <AgenticGrowthPlanner
+              opportunityId={selectedPlannerOpportunityId}
+              onReviewActions={(oppId) => {
+                handleSelectOpportunityById(oppId);
+              }}
+              onPreparationComplete={() => {
+                loadDashboardData();
+                showToast("success", "Growth plan actions prepared in PENDING_APPROVAL status.");
+              }}
+            />
+          </div>
+        )}
 
         {/* Opportunities Section */}
         <section className="space-y-4">
@@ -2090,6 +2138,13 @@ export default function MerchantDashboard() {
         merchantId={merchant?.id || null}
         merchantName={merchant?.name}
         onRefreshDashboard={loadDashboardData}
+      />
+
+      {/* AI Buyer Preview & Discovery Modal (Phase 5) */}
+      <AIBuyerPreviewModal
+        isOpen={showAIBuyerModal}
+        onClose={() => setShowAIBuyerModal(false)}
+        currency={merchant?.currency || "INR"}
       />
     </div>
   );

@@ -9,6 +9,11 @@ import {
   createGrowthActionTool,
   createGrowthActionsForCustomersTool,
   getGrowthActionStatusTool,
+  getGrowthOpportunitiesTool,
+  inspectOpportunityEvidenceTool,
+  resolveEligibleCustomersTool,
+  recommendGrowthActionTool,
+  prepareGrowthActionsTool,
 } from "./tools";
 
 export interface AgentOrchestratorInput {
@@ -566,6 +571,117 @@ export async function runAgentOrchestrator(
       },
     }),
 
+    getGrowthOpportunities: tool({
+      description:
+        "Returns verified merchant growth opportunities with authoritative estimated revenues, strategies, and confidence scores.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+      }),
+      execute: async (toolInput: { merchantId: string }) => {
+        const t0 = performance.now();
+        const res = await getGrowthOpportunitiesTool({ merchantId: toolInput.merchantId });
+        const dt = Math.round(performance.now() - t0);
+        toolProfiles.push({
+          toolName: "getGrowthOpportunities",
+          durationMs: dt,
+          extraInfo: `Opps: ${Array.isArray(res.data) ? res.data.length : 0}`,
+        });
+        return res;
+      },
+    }),
+
+    inspectOpportunityEvidence: tool({
+      description:
+        "Returns deterministic co-purchase facts, attach rates, sample sizes, and authoritative prices for a selected opportunity.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+        opportunityId: z.string().describe("Opportunity identifier to inspect."),
+      }),
+      execute: async (toolInput: { merchantId: string; opportunityId: string }) => {
+        const t0 = performance.now();
+        const res = await inspectOpportunityEvidenceTool({
+          merchantId: toolInput.merchantId,
+          opportunityId: toolInput.opportunityId,
+        });
+        const dt = Math.round(performance.now() - t0);
+        toolProfiles.push({
+          toolName: "inspectOpportunityEvidence",
+          durationMs: dt,
+          extraInfo: `Opportunity: ${toolInput.opportunityId}`,
+        });
+        return res;
+      },
+    }),
+
+    resolveEligibleCustomers: tool({
+      description:
+        "Uses backend deterministic eligibility rules to resolve the real target customer population for an opportunity.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+        opportunityId: z.string().describe("Opportunity identifier."),
+      }),
+      execute: async (toolInput: { merchantId: string; opportunityId: string }) => {
+        const t0 = performance.now();
+        const res = await resolveEligibleCustomersTool({
+          merchantId: toolInput.merchantId,
+          opportunityId: toolInput.opportunityId,
+        });
+        const dt = Math.round(performance.now() - t0);
+        toolProfiles.push({
+          toolName: "resolveEligibleCustomers",
+          durationMs: dt,
+          extraInfo: `Opportunity: ${toolInput.opportunityId}`,
+        });
+        return res;
+      },
+    }),
+
+    recommendGrowthAction: tool({
+      description:
+        "Produces a structured, evidence-backed growth plan recommendation for an opportunity. Requires merchant approval before execution.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+        opportunityId: z.string().describe("Opportunity identifier to formulate recommendation for."),
+      }),
+      execute: async (toolInput: { merchantId: string; opportunityId: string }) => {
+        const t0 = performance.now();
+        const res = await recommendGrowthActionTool({
+          merchantId: toolInput.merchantId,
+          opportunityId: toolInput.opportunityId,
+        });
+        const dt = Math.round(performance.now() - t0);
+        toolProfiles.push({
+          toolName: "recommendGrowthAction",
+          durationMs: dt,
+          extraInfo: `Opportunity: ${toolInput.opportunityId}`,
+        });
+        return res;
+      },
+    }),
+
+    prepareGrowthActions: tool({
+      description:
+        "Prepares GrowthActions in PENDING_APPROVAL status for all eligible customers of an opportunity. The AI agent CANNOT approve or execute financial actions.",
+      inputSchema: z.object({
+        merchantId: z.string().describe("Authoritative merchant identifier."),
+        opportunityId: z.string().describe("Opportunity identifier to prepare actions for."),
+      }),
+      execute: async (toolInput: { merchantId: string; opportunityId: string }) => {
+        const t0 = performance.now();
+        const res = await prepareGrowthActionsTool({
+          merchantId: toolInput.merchantId,
+          opportunityId: toolInput.opportunityId,
+        });
+        const dt = Math.round(performance.now() - t0);
+        toolProfiles.push({
+          toolName: "prepareGrowthActions",
+          durationMs: dt,
+          extraInfo: `Prepared: ${(res.data as any)?.createdCount ?? 0}`,
+        });
+        return res;
+      },
+    }),
+
     getGrowthActionStatus: tool({
       description:
         "Retrieves current status, payment link information, and audit timeline for a GrowthAction.",
@@ -822,16 +938,31 @@ Merchant Instruction:
       });
 
       const resData = toolOutput as { success?: boolean; data?: unknown };
-      if (tr.toolName === "analyzeCrossSell" && resData?.success && Array.isArray(resData.data)) {
+      if (
+        (tr.toolName === "analyzeCrossSell" || tr.toolName === "getGrowthOpportunities") &&
+        resData?.success &&
+        Array.isArray(resData.data)
+      ) {
         opportunitiesFound.push(...resData.data);
+      }
+      if (tr.toolName === "recommendGrowthAction" && resData?.success && resData.data) {
+        opportunitiesFound.push(resData.data);
       }
       if (tr.toolName === "createGrowthAction" && resData?.success && resData.data) {
         actionsCreated.push(resData.data);
       }
-      if (tr.toolName === "createGrowthActionsForCustomers" && resData?.success && resData.data) {
-        const bulkData = resData.data as { createdActions?: unknown[] };
+      if (
+        (tr.toolName === "createGrowthActionsForCustomers" || tr.toolName === "prepareGrowthActions") &&
+        resData?.success &&
+        resData.data
+      ) {
+        const bulkData = resData.data as { createdActions?: unknown[]; actionIds?: string[] };
         if (Array.isArray(bulkData.createdActions)) {
           actionsCreated.push(...bulkData.createdActions);
+        } else if (Array.isArray(bulkData.actionIds)) {
+          actionsCreated.push(
+            ...bulkData.actionIds.map((id) => ({ id, status: "PENDING_APPROVAL" }))
+          );
         }
       }
     }

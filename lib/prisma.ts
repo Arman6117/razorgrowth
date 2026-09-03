@@ -16,7 +16,14 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter: new PrismaPg(new pg.Pool({ connectionString })),
+    adapter: new PrismaPg(
+      new pg.Pool({
+        connectionString,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+      })
+    ),
   });
 
 if (process.env.NODE_ENV !== "production") {
