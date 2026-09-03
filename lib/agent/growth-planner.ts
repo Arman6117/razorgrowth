@@ -10,6 +10,7 @@ import {
   createGrowthActionsForCustomers,
   CreateGrowthActionsForCustomersResult,
   isCustomerEligible,
+  parseGrowthActionParameters,
 } from "../actions/growth-action";
 import {
   getPrimaryModelConfig,
@@ -237,8 +238,8 @@ export async function resolveEligibleCustomersForOpportunity(input: {
   });
   const executedCustomerSet = new Set<string>();
   for (const act of executedActions) {
-    const params = act.parameters as Record<string, unknown> | null;
-    const cid = params?.customerId as string | undefined;
+    const params = parseGrowthActionParameters(act.parameters);
+    const cid = params.customerId;
     if (cid) executedCustomerSet.add(cid);
   }
 

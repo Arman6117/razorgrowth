@@ -26,6 +26,19 @@ export class ValidationError extends GrowthActionError {
   }
 }
 
+export class InvalidGrowthActionParametersError extends ValidationError {
+  public readonly issues?: Array<{ path: Array<string | number | symbol>; message: string }>;
+
+  constructor(
+    message: string,
+    issues?: Array<{ path: Array<string | number | symbol>; message: string }>
+  ) {
+    super(message);
+    this.name = "InvalidGrowthActionParametersError";
+    this.issues = issues;
+  }
+}
+
 export class IneligibleCustomerError extends GrowthActionError {
   constructor(message = "Customer is not eligible for this opportunity") {
     super(message);

@@ -19,7 +19,11 @@ import {
 import { assertCanExecute } from "./state-machine";
 import { isCustomerEligible } from "./eligibility";
 import { duplicateActionCheck } from "./duplicate-check";
-import { parseGrowthActionParameters, toPrismaJson } from "./types";
+import {
+  parseGrowthActionParameters,
+  safeParseGrowthActionParameters,
+  toPrismaJson,
+} from "./types";
 import type {
   ExecuteGrowthActionInput,
   ExecuteGrowthActionResult,
@@ -339,7 +343,8 @@ export async function executeGrowthAction(
       failureExplanation = `Razorpay Test Mode limit exceeded: Payment link amount exceeds Razorpay Test Mode maximum limit of ₹50,000 per payment link. Authoritative product price in database remains unchanged.`;
     }
 
-    const currentParams = parseGrowthActionParameters(growthAction.parameters);
+    const currentParamsResult = safeParseGrowthActionParameters(growthAction.parameters);
+    const currentParams = currentParamsResult.success ? currentParamsResult.data : {};
 
     const updatedParamsWithFailure = {
       ...currentParams,

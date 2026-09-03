@@ -7,6 +7,7 @@ import {
   approveGrowthAction,
   getGrowthAction,
   duplicateActionCheck,
+  parseGrowthActionParameters,
 } from "../actions/growth-action";
 import {
   GrowthActionStatus,
@@ -337,7 +338,7 @@ export async function createGrowthActionTool(input: {
       targetProductId,
     });
 
-    const params = action.parameters as Record<string, unknown>;
+    const params = parseGrowthActionParameters(action.parameters);
 
     return {
       success: true,
@@ -407,7 +408,7 @@ export async function createGrowthActionsForCustomersTool(input: {
         actionIds: result.actionIds,
         skippedCustomers: result.skippedCustomers,
         createdActions: result.createdActions.map((a) => {
-          const params = a.parameters as Record<string, unknown>;
+          const params = parseGrowthActionParameters(a.parameters);
           return {
             actionId: a.id,
             opportunityId: a.opportunityId,

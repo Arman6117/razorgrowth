@@ -8,6 +8,7 @@ import {
 } from "../generated/prisma/enums";
 import type { GrowthActionModel } from "../generated/prisma/models/GrowthAction";
 import type { PaymentLinkResult } from "../razorpay/payment-links";
+import { InvalidGrowthActionParametersError } from "./errors";
 
 // ============================================================================
 // ZOD SCHEMAS & PARAMETER TYPES
@@ -27,6 +28,11 @@ export type GrowthActionFailureDetails = z.infer<
   typeof GrowthActionFailureDetailsSchema
 >;
 
+/**
+ * Zod schema defining the valid typed structure of GrowthAction.parameters.
+ * Uses .passthrough() to retain unmodeled/custom metadata while strictly enforcing
+ * runtime type correctness for all known domain properties.
+ */
 export const GrowthActionParametersSchema = z
   .object({
     customerId: z.string().optional(),
@@ -51,6 +57,8 @@ export const GrowthActionParametersSchema = z
     lastFailureAt: z.string().optional(),
     lastFailureDetails: GrowthActionFailureDetailsSchema.optional(),
     description: z.string().optional(),
+    linkUrl: z.string().optional(),
+    qrCodeUrl: z.string().optional(),
   })
   .passthrough();
 
@@ -58,27 +66,65 @@ export type GrowthActionParameters = z.infer<
   typeof GrowthActionParametersSchema
 >;
 
+export type SafeParseGrowthActionResult =
+  | { success: true; data: GrowthActionParameters }
+  | { success: false; error: InvalidGrowthActionParametersError };
+
 /**
- * Safely parses GrowthAction parameters JSON with runtime validation.
- * Uses passthrough to safely retain custom/unmodeled fields without crashing.
+ * Safely parses GrowthAction parameters JSON with runtime validation without throwing.
+ * Returns a discriminated union { success: true, data } | { success: false, error }.
+ */
+export function safeParseGrowthActionParameters(
+  raw: unknown
+): SafeParseGrowthActionResult {
+  if (raw === null || raw === undefined) {
+    return { success: true, data: {} };
+  }
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return {
+      success: false,
+      error: new InvalidGrowthActionParametersError(
+        "GrowthAction parameters must be a JSON object"
+      ),
+    };
+  }
+  const result = GrowthActionParametersSchema.safeParse(raw);
+  if (result.success) {
+    return { success: true, data: result.data };
+  }
+  const issueSummary = result.error.issues
+    .map((i) => `${i.path.join(".")}: ${i.message}`)
+    .join("; ");
+  return {
+    success: false,
+    error: new InvalidGrowthActionParametersError(
+      `Invalid GrowthAction parameters: ${issueSummary}`,
+      result.error.issues
+    ),
+  };
+}
+
+/**
+ * Strictly parses and validates GrowthAction parameters JSON.
+ * Throws InvalidGrowthActionParametersError if raw data violates schema.
  */
 export function parseGrowthActionParameters(
   raw: unknown
 ): GrowthActionParameters {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {};
+  const result = safeParseGrowthActionParameters(raw);
+  if (!result.success) {
+    throw result.error;
   }
-  const result = GrowthActionParametersSchema.safeParse(raw);
-  if (result.success) {
-    return result.data;
-  }
-  return { ...(raw as Record<string, unknown>) };
+  return result.data;
 }
 
 /**
  * Converts validated GrowthActionParameters to Prisma-compatible InputJsonObject.
+ * Accepts ONLY already-validated GrowthActionParameters.
  */
-export function toPrismaJson(params: GrowthActionParameters): Prisma.InputJsonObject {
+export function toPrismaJson(
+  params: GrowthActionParameters
+): Prisma.InputJsonObject {
   return params as unknown as Prisma.InputJsonObject;
 }
 
