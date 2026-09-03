@@ -50,6 +50,29 @@ export async function GET(req: NextRequest) {
       statusMap[item.status] = item._count._all;
     }
 
+    // Calculate authoritative realized revenue from completed EXECUTED GrowthActions
+    const executedActions = await prisma.growthAction.findMany({
+      where: {
+        merchantId: merchant.id,
+        status: "EXECUTED",
+      },
+      select: {
+        parameters: true,
+      },
+    });
+
+    let totalRealizedRevenue = 0;
+    for (const act of executedActions) {
+      const p = act.parameters as Record<string, unknown> | null;
+      const amount =
+        typeof p?.amountInRupees === "number"
+          ? p.amountInRupees
+          : typeof p?.amountInPaise === "number"
+          ? p.amountInPaise / 100
+          : 0;
+      totalRealizedRevenue += amount;
+    }
+
     return NextResponse.json({
       success: true,
       merchant: {
@@ -61,6 +84,7 @@ export async function GET(req: NextRequest) {
         counts: {
           ...merchant._count,
           actionsByStatus: statusMap,
+          realizedRevenue: totalRealizedRevenue,
         },
       },
     });

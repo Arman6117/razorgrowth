@@ -13,6 +13,8 @@ import {
   User,
   Zap,
   RefreshCw,
+  Mail,
+  Send,
 } from "lucide-react";
 
 export interface AuditEventItem {
@@ -80,6 +82,10 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
         return <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
       case "PAYMENT_LINK_CREATED":
         return <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />;
+      case "PAYMENT_LINK_DELIVERED":
+        return <Mail className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+      case "PAYMENT_LINK_RESENT":
+        return <Send className="w-4 h-4 text-purple-600 dark:text-purple-400" />;
       case "PAYMENT_LINK_PAID":
         return <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
       case "ACTION_RETRY":
@@ -101,6 +107,10 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
         return "Merchant Approved Action";
       case "PAYMENT_LINK_CREATED":
         return "Razorpay Payment Link Generated (Test Mode)";
+      case "PAYMENT_LINK_DELIVERED":
+        return "Payment Link Email Sent via Razorpay";
+      case "PAYMENT_LINK_RESENT":
+        return "Payment Link Email Resent via Razorpay";
       case "PAYMENT_LINK_PAID":
         return "Payment Verified via Razorpay Webhook";
       case "ACTION_RETRY":
@@ -151,6 +161,30 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
                 {/* Metadata Details */}
                 {Object.keys(meta).length > 0 && (
                   <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1 bg-white/70 dark:bg-black/30 p-2.5 rounded-md border border-neutral-100 dark:border-neutral-800/60 font-mono">
+                    {Boolean(meta.deliveryMedium) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-500">Delivery Medium:</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                          {String(meta.deliveryMedium)}
+                        </span>
+                      </div>
+                    )}
+                    {Boolean(meta.customerEmail) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-500">Recipient Email:</span>
+                        <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                          {String(meta.customerEmail)}
+                        </span>
+                      </div>
+                    )}
+                    {Boolean(meta.resendCount) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-500">Resend Attempt:</span>
+                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                          #{String(meta.resendCount)}
+                        </span>
+                      </div>
+                    )}
                     {Boolean(meta.paymentLinkId) && (
                       <div className="flex items-center justify-between">
                         <span className="text-neutral-500">Payment Link ID:</span>

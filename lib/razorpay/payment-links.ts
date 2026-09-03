@@ -175,7 +175,7 @@ export async function createPaymentLink(
     },
     notify: {
       sms: false,
-      email: false,
+      email: true,
     },
     reminder_enable: false,
     notes,
@@ -211,3 +211,44 @@ export async function createPaymentLink(
     createdAt: response.created_at,
   };
 }
+
+export interface ResendPaymentLinkNotificationInput {
+  merchantId: string;
+  paymentLinkId: string;
+  medium?: "email" | "sms";
+}
+
+export interface RazorpayNotifyResponse {
+  success: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Resends a payment link notification to the customer via Razorpay's native notification API.
+ * POST https://api.razorpay.com/v1/payment_links/:id/notify_by/:medium
+ */
+export async function resendPaymentLinkNotification(
+  input: ResendPaymentLinkNotificationInput
+): Promise<RazorpayNotifyResponse> {
+  const { merchantId, paymentLinkId, medium = "email" } = input;
+
+  if (!merchantId?.trim()) {
+    throw new Error("merchantId is required");
+  }
+  if (!paymentLinkId?.trim()) {
+    throw new Error("paymentLinkId is required");
+  }
+
+  const endpoint = `/payment_links/${encodeURIComponent(paymentLinkId)}/notify_by/${encodeURIComponent(medium)}`;
+
+  const response = await razorpayMerchantRequest<RazorpayNotifyResponse>(
+    merchantId,
+    endpoint,
+    {
+      method: "POST",
+    }
+  );
+
+  return response;
+}
+

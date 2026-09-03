@@ -29,11 +29,17 @@ import {
   Upload,
   FileText,
   Loader2,
+  Mail,
 } from "lucide-react";
 import { QRCode } from "@/components/qr-code";
 import { AuditTimeline, AuditEventItem } from "@/components/audit-timeline";
 import { Button } from "@/components/ui/button";
 import { AgentChatDrawer } from "@/components/agent-chat-drawer";
+import {
+  GrowthIntelligencePanel,
+  RankedOpportunityItem,
+  GrowthSnapshotData,
+} from "@/components/growth-intelligence-panel";
 
 interface MerchantInfo {
   id: string;
@@ -47,6 +53,7 @@ interface MerchantInfo {
     opportunities: number;
     growthActions: number;
     actionsByStatus: Record<string, number>;
+    realizedRevenue?: number;
   };
 }
 
@@ -142,6 +149,7 @@ export default function MerchantDashboard() {
   const [approving, setApproving] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [simulatingWebhook, setSimulatingWebhook] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   // Notification / Toast message
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
@@ -155,6 +163,12 @@ export default function MerchantDashboard() {
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [agentOutput, setAgentOutput] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState(false);
+
+  // AI Growth Intelligence state (Phase 3)
+  const [growthSnapshot, setGrowthSnapshot] = useState<GrowthSnapshotData | null>(null);
+  const [rankedOpportunities, setRankedOpportunities] = useState<RankedOpportunityItem[]>([]);
+  const [analyzingGrowth, setAnalyzingGrowth] = useState(false);
+  const [growthAiEnhanced, setGrowthAiEnhanced] = useState(false);
 
   const showToast = (type: "success" | "error" | "info", message: string) => {
     setToast({ type, message });
@@ -189,10 +203,11 @@ export default function MerchantDashboard() {
   const loadDashboardData = useCallback(async () => {
     try {
       setRefreshing(true);
-      const [merchantRes, oppsRes, connRes] = await Promise.all([
+      const [merchantRes, oppsRes, connRes, growthRes] = await Promise.all([
         fetch("/api/merchant"),
         fetch("/api/opportunities"),
         fetch("/api/razorpay/connection"),
+        fetch("/api/growth/analyze").catch(() => null),
       ]);
 
       if (merchantRes.status === 401 || oppsRes.status === 401) {
@@ -214,6 +229,13 @@ export default function MerchantDashboard() {
         const data = await connRes.json();
         setConnectionInfo(data);
       }
+
+      if (growthRes && growthRes.ok) {
+        const data = await growthRes.json();
+        if (data.snapshot) {
+          setGrowthSnapshot(data.snapshot);
+        }
+      }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
       showToast("error", "Failed to load dashboard data. Check database connection.");
@@ -222,6 +244,31 @@ export default function MerchantDashboard() {
       setRefreshing(false);
     }
   }, []);
+
+  // 1b. Run AI Growth Intelligence Analysis (Phase 3)
+  const handleRunGrowthAnalysis = async () => {
+    setAnalyzingGrowth(true);
+    try {
+      showToast("info", "Running AI Growth Intelligence analysis across transactions...");
+      const res = await fetch("/api/growth/analyze", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Growth analysis failed");
+      }
+      setGrowthSnapshot(data.snapshot);
+      setRankedOpportunities(data.opportunities || []);
+      setGrowthAiEnhanced(Boolean(data.aiEnhanced));
+      showToast(
+        "success",
+        data.message || `AI Growth Intelligence discovered ${data.opportunities?.length || 0} opportunities!`
+      );
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Error running growth analysis");
+    } finally {
+      setAnalyzingGrowth(false);
+    }
+  };
 
   const handleConnectRazorpay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +419,35 @@ export default function MerchantDashboard() {
       showToast("error", "Network error fetching customers.");
     } finally {
       setLoadingCustomers(false);
+    }
+  };
+
+  const handleSelectOpportunityById = (opportunityId: string) => {
+    const found = opportunities.find((o) => o.id === opportunityId);
+    if (found) {
+      handleOpenOpportunity(found);
+    } else {
+      const ranked = rankedOpportunities.find((o) => o.id === opportunityId);
+      if (ranked && ranked.id) {
+        handleOpenOpportunity({
+          id: ranked.id,
+          merchantId: ranked.merchantId,
+          sourceProductId: ranked.sourceProductId || "",
+          sourceProductName: ranked.evidence.sourceProductName || "Source Product",
+          targetProductId: ranked.targetProductId,
+          targetProductName: ranked.recommendedProductName,
+          targetProductPrice: ranked.evidence.targetPrice || 0,
+          sourceCustomers: ranked.evidence.sourceCustomers || 0,
+          customersTogether: ranked.evidence.customersTogether || 0,
+          eligibleCustomerCount: ranked.targetCustomerCount,
+          eligibleCustomerIds: [],
+          crossSellRate: ranked.confidence,
+          expectedRevenue: ranked.estimatedValue,
+          status: ranked.status,
+          actionCount: 0,
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
   };
 
@@ -584,6 +660,28 @@ export default function MerchantDashboard() {
     }
   };
 
+  // 6b. Resend Razorpay Payment Link Email Notification
+  const handleResendEmail = async () => {
+    if (!merchant || !actionDetail) return;
+    setResendingEmail(true);
+    try {
+      const res = await fetch(`/api/growth-actions/${actionDetail.id}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to resend payment link email");
+      }
+      showToast("success", "Payment link email notification resent via Razorpay!");
+      await handleOpenAction(actionDetail.id);
+      loadDashboardData();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Error resending email");
+    } finally {
+      setResendingEmail(false);
+    }
+  };
+
   // 7. Simulate Webhook confirmation (Demo helper for instant webhook verification)
   const handleSimulateWebhook = async () => {
     if (!merchant || !actionDetail) return;
@@ -696,6 +794,41 @@ export default function MerchantDashboard() {
   const totalEstimatedRevenue = opportunities.reduce((sum, o) => sum + o.expectedRevenue, 0);
   const totalEligibleCustomers = opportunities.reduce((sum, o) => sum + o.eligibleCustomerCount, 0);
 
+  const displayRankedOpportunities: RankedOpportunityItem[] =
+    rankedOpportunities.length > 0
+      ? rankedOpportunities
+      : opportunities.map((opp, idx) => ({
+          id: opp.id,
+          merchantId: opp.merchantId,
+          type: "CROSS_SELL" as const,
+          title: `Cross-sell: ${opp.sourceProductName} → ${opp.targetProductName}`,
+          explanation: `${opp.customersTogether} historical co-purchases from ${opp.sourceCustomers} buyers (${(opp.crossSellRate * 100).toFixed(1)}% attach rate). Recommending ${opp.targetProductName} to ${opp.eligibleCustomerCount} eligible buyers.`,
+          sourceProductId: opp.sourceProductId,
+          targetProductId: opp.targetProductId,
+          recommendedProductName: opp.targetProductName,
+          targetCustomerCount: opp.eligibleCustomerCount,
+          estimatedValue: opp.expectedRevenue,
+          confidence: opp.crossSellRate,
+          evidence: {
+            sourceProductName: opp.sourceProductName,
+            targetProductName: opp.targetProductName,
+            targetPrice: opp.targetProductPrice,
+            sourceCustomers: opp.sourceCustomers,
+            customersTogether: opp.customersTogether,
+            eligibleCustomerCount: opp.eligibleCustomerCount,
+            attachRate: opp.crossSellRate,
+            sampleSize: opp.sourceCustomers,
+          },
+          score: Number((1 - idx * 0.1).toFixed(2)),
+          scoringBreakdown: {
+            normalizedEstimatedValue: 1.0,
+            evidenceStrength: 0.8,
+            confidence: opp.crossSellRate,
+            formula: "score = (normalizedEstimatedValue * 0.5) + (evidenceStrength * 0.3) + (confidence * 0.2)",
+          },
+          status: opp.status,
+        }));
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">
       {/* Toast Notification */}
@@ -790,8 +923,8 @@ export default function MerchantDashboard() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Merchant Welcome Banner & Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-1 p-5 rounded-2xl bg-gradient-to-br from-neutral-900 to-neutral-800 text-white shadow-lg flex flex-col justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="sm:col-span-2 lg:col-span-1 p-5 rounded-2xl bg-gradient-to-br from-neutral-900 to-neutral-800 text-white shadow-lg flex flex-col justify-between">
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
                 Active Merchant
@@ -808,7 +941,7 @@ export default function MerchantDashboard() {
           <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-neutral-500">Total Pipeline Value</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600">
                 <DollarSign className="w-4 h-4" />
               </div>
             </div>
@@ -816,14 +949,33 @@ export default function MerchantDashboard() {
               <div className="text-2xl font-extrabold text-neutral-900 dark:text-white">
                 ₹{totalEstimatedRevenue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
               </div>
-              <p className="text-xs text-neutral-500 mt-1">Across {opportunities.length} opportunities</p>
+              <p className="text-xs text-neutral-500 mt-1">Potential across {opportunities.length} opportunities</p>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-emerald-200/80 dark:border-emerald-900/60 shadow-sm flex flex-col justify-between bg-gradient-to-b from-emerald-50/30 to-transparent dark:from-emerald-950/20">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                Realized Revenue
+              </span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                ₹{(merchant?.counts?.realizedRevenue || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">
+                Confirmed from {merchant?.counts?.actionsByStatus?.EXECUTED || 0} paid actions
+              </p>
             </div>
           </div>
 
           <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-neutral-500">Eligible Customer Reach</span>
-              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600">
                 <Users className="w-4 h-4" />
               </div>
             </div>
@@ -1042,13 +1194,23 @@ export default function MerchantDashboard() {
           </div>
         </div>
 
+        {/* AI Growth Intelligence Section (Phase 3) */}
+        <GrowthIntelligencePanel
+          opportunities={displayRankedOpportunities}
+          snapshot={growthSnapshot}
+          analyzing={analyzingGrowth}
+          onRunAnalysis={handleRunGrowthAnalysis}
+          onSelectOpportunity={handleSelectOpportunityById}
+          aiEnhanced={growthAiEnhanced}
+        />
+
         {/* Opportunities Section */}
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h3 className="text-lg font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-500" />
-                Discovered Revenue Opportunities
+                <Layers className="w-5 h-5 text-indigo-500" />
+                Discovered Opportunities Catalog
               </h3>
               <p className="text-sm text-neutral-500">
                 Derived deterministically by the cross-sell analytics engine from customer transaction history.
@@ -1562,6 +1724,28 @@ export default function MerchantDashboard() {
                               Open Checkout
                               <ExternalLink className="w-3 h-3" />
                             </a>
+
+                            {actionDetail.status === "EXECUTING" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleResendEmail}
+                                disabled={resendingEmail}
+                                className="text-xs border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                              >
+                                {resendingEmail ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+                                    Resending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Mail className="w-3.5 h-3.5 mr-1 text-indigo-500" />
+                                    Resend Email
+                                  </>
+                                )}
+                              </Button>
+                            )}
 
                             {actionDetail.status === "EXECUTING" && (
                               <Button

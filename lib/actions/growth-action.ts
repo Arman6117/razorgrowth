@@ -5,7 +5,11 @@ import {
   AuditActor,
   OpportunityStatus,
 } from "../generated/prisma/enums";
-import { createPaymentLink, PaymentLinkResult } from "../razorpay/payment-links";
+import {
+  createPaymentLink,
+  PaymentLinkResult,
+  resendPaymentLinkNotification,
+} from "../razorpay/payment-links";
 import { RazorpayApiError } from "../razorpay/client";
 import type { GrowthActionModel } from "../generated/prisma/models/GrowthAction";
 
@@ -1146,6 +1150,25 @@ export async function executeGrowthAction(
         },
       });
 
+      // Record delivery/notification requested AuditEvent via Razorpay native email
+      await tx.auditEvent.create({
+        data: {
+          merchantId,
+          actionId: growthAction.id,
+          eventType: "PAYMENT_LINK_DELIVERED",
+          actor: AuditActor.RAZORPAY,
+          metadata: {
+            paymentLinkId: paymentLinkResult.paymentLinkId,
+            shortUrl: paymentLinkResult.shortUrl,
+            deliveryMedium: "EMAIL",
+            customerId: customer.id,
+            customerEmail: customer.email,
+            notificationRequested: true,
+            sentAt: new Date().toISOString(),
+          },
+        },
+      });
+
       return updated;
     });
 
@@ -1342,3 +1365,134 @@ export async function listGrowthActions({
     orderBy: { createdAt: "desc" },
   });
 }
+
+export interface ResendGrowthActionPaymentLinkInput {
+  merchantId: string;
+  actionId: string;
+  medium?: "email" | "sms";
+}
+
+export interface ResendGrowthActionPaymentLinkResult {
+  success: boolean;
+  action: GrowthActionModel;
+  notifyResult: Record<string, unknown>;
+}
+
+/**
+ * Resends the existing Razorpay Payment Link email notification to the customer.
+ *
+ * SAFETY GUARANTEES:
+ * 1. Requires authenticated merchant ownership.
+ * 2. Validates that the action has an active paymentLinkId.
+ * 3. Disallows resend for EXECUTED (already paid), PENDING_APPROVAL, or REJECTED actions.
+ * 4. Calls Razorpay POST /v1/payment_links/:id/notify_by/:medium using merchant credentials.
+ * 5. NEVER creates a new Payment Link.
+ * 6. Records a PAYMENT_LINK_RESENT AuditEvent.
+ */
+export async function resendGrowthActionPaymentLink(
+  input: ResendGrowthActionPaymentLinkInput
+): Promise<ResendGrowthActionPaymentLinkResult> {
+  const { merchantId, actionId, medium = "email" } = input;
+
+  if (!merchantId?.trim()) {
+    throw new Error("merchantId is required");
+  }
+  if (!actionId?.trim()) {
+    throw new Error("actionId is required");
+  }
+
+  // 1. Fetch authoritative GrowthAction scoped to merchant
+  const growthAction = await prisma.growthAction.findFirst({
+    where: { id: actionId, merchantId },
+  });
+
+  if (!growthAction) {
+    throw new Error(`GrowthAction '${actionId}' not found for merchant`);
+  }
+
+  // 2. Validate state machine:
+  // Must NOT be EXECUTED (cannot resend for already paid action)
+  if (growthAction.status === GrowthActionStatus.EXECUTED) {
+    throw new Error(
+      `Cannot resend notification for already EXECUTED (paid) GrowthAction '${actionId}'`
+    );
+  }
+
+  if (growthAction.status === GrowthActionStatus.PENDING_APPROVAL) {
+    throw new Error(
+      `Cannot resend notification: Action is in '${GrowthActionStatus.PENDING_APPROVAL}' and has no active Payment Link`
+    );
+  }
+
+  if (growthAction.status === GrowthActionStatus.REJECTED) {
+    throw new Error(`Cannot resend notification: Action has been rejected`);
+  }
+
+  // 3. Must have existing paymentLinkId
+  const params = (
+    typeof growthAction.parameters === "object" && growthAction.parameters !== null
+      ? growthAction.parameters
+      : {}
+  ) as Record<string, unknown>;
+
+  const paymentLinkId = (params.paymentLinkId as string)?.trim();
+  if (!paymentLinkId) {
+    throw new Error(`GrowthAction '${actionId}' has no active paymentLinkId to resend`);
+  }
+
+  const customerId = (params.customerId as string)?.trim();
+  const customerEmail = (params.customerEmail as string)?.trim();
+  const shortUrl = (params.shortUrl as string)?.trim();
+
+  // 4. Call Razorpay notify API using merchant credentials
+  const notifyResult = await resendPaymentLinkNotification({
+    merchantId,
+    paymentLinkId,
+    medium,
+  });
+
+  const resentAt = new Date();
+
+  // 5. Update parameters with resend metadata & record AuditEvent atomically
+  const updatedParameters = {
+    ...params,
+    lastResentAt: resentAt.toISOString(),
+    resendCount: ((params.resendCount as number) || 0) + 1,
+  };
+
+  const updatedAction = await prisma.$transaction(async (tx) => {
+    const updated = await tx.growthAction.update({
+      where: { id: growthAction.id },
+      data: {
+        parameters: updatedParameters,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        merchantId,
+        actionId: growthAction.id,
+        eventType: "PAYMENT_LINK_RESENT",
+        actor: AuditActor.MERCHANT,
+        metadata: {
+          paymentLinkId,
+          shortUrl,
+          deliveryMedium: medium.toUpperCase(),
+          customerId,
+          customerEmail,
+          resentAt: resentAt.toISOString(),
+          resendCount: updatedParameters.resendCount,
+        },
+      },
+    });
+
+    return updated;
+  });
+
+  return {
+    success: true,
+    action: updatedAction,
+    notifyResult,
+  };
+}
+
