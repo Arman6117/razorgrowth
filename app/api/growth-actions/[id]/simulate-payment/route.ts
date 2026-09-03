@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handlePaymentLinkWebhook, RazorpayWebhookPayload } from "@/lib/razorpay/webhooks";
 import { requireAuthenticatedMerchant, AuthError } from "@/lib/auth/session";
+import { parseGrowthActionParameters } from "@/lib/actions/growth-action";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,16 @@ export async function POST(
       return NextResponse.json({ error: `GrowthAction '${id}' not found` }, { status: 404 });
     }
 
-    const params = (action.parameters || {}) as Record<string, unknown>;
-    const paymentLinkId = (params.paymentLinkId as string) || `plink_test_${id.slice(-8)}`;
-    const amountInPaise = (params.amountInPaise as number) || 200000;
+    const params = parseGrowthActionParameters(action.parameters);
+    if (!params.paymentLinkId) {
+      return NextResponse.json(
+        { error: `GrowthAction '${id}' does not have an active payment link to simulate payment for` },
+        { status: 400 }
+      );
+    }
+
+    const paymentLinkId = params.paymentLinkId;
+    const amountInPaise = params.amountInPaise || 200000;
 
     const payload: RazorpayWebhookPayload = {
       entity: "event",
@@ -38,18 +46,18 @@ export async function POST(
             entity: "payment_link",
             amount: amountInPaise,
             amount_paid: amountInPaise,
-            currency: (params.currency as string) || "INR",
+            currency: params.currency || "INR",
             status: "paid",
-            short_url: (params.shortUrl as string) || `https://rzp.io/rzp/sim_${id.slice(-6)}`,
+            short_url: params.shortUrl || `https://rzp.io/rzp/sim_${id.slice(-6)}`,
             customer: {
-              name: (params.customerName as string) || "Customer",
-              email: (params.customerEmail as string) || "customer@demo.com",
+              name: params.customerName || "Customer",
+              email: params.customerEmail || "customer@demo.com",
             },
             notes: {
               merchantId: action.merchantId,
-              customerId: (params.customerId as string) || "",
+              customerId: params.customerId || "",
               targetProductId:
-                (params.targetProductId as string) || action.opportunity?.targetProductId || "",
+                params.targetProductId || action.opportunity?.targetProductId || "",
               opportunityId: action.opportunityId,
               growthActionId: action.id,
             },
@@ -60,7 +68,7 @@ export async function POST(
             id: `pay_sim_${Date.now()}`,
             entity: "payment",
             amount: amountInPaise,
-            currency: (params.currency as string) || "INR",
+            currency: params.currency || "INR",
             status: "captured",
             method: "upi",
           },
@@ -72,7 +80,7 @@ export async function POST(
             amount: amountInPaise,
             amount_paid: amountInPaise,
             amount_due: 0,
-            currency: (params.currency as string) || "INR",
+            currency: params.currency || "INR",
             status: "paid",
           },
         },

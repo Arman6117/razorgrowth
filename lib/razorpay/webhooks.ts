@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "../prisma";
 import { GrowthActionStatus, AuditActor } from "../generated/prisma/enums";
+import { safeParseGrowthActionParameters } from "../actions/growth-action";
 
 export interface RazorpayPaymentLinkEntity {
   id: string;
@@ -117,7 +118,14 @@ export function validateWebhookSignature(
 
 /**
  * Handles verified Razorpay webhook events for the RazorGrowth flow.
- * Processes 'payment_link.paid' idempotently with strict business and amount validations.
+ *
+ * FINANCIAL INTEGRITY & IDEMPOTENCY GUARANTEES:
+ * 1. Exact Payment Link ID Binding: GrowthAction.parameters.paymentLinkId must strictly match paymentLink.id.
+ * 2. Currency Validation: incoming payment link currency must match authoritative Merchant.currency.
+ * 3. Authoritative DB Price: payment amount must strictly equal Product.price * 100 paise.
+ * 4. Tenant Isolation: merchantId, growthAction.merchantId, customer.merchantId, and product.merchantId must match.
+ * 5. Concurrent Idempotency: PostgreSQL transaction advisory lock on (merchantId, paymentLinkId) guarantees
+ *    duplicate and parallel webhook deliveries execute state transition and PAYMENT_LINK_PAID audit event exactly once.
  */
 export async function handlePaymentLinkWebhook(
   payload: RazorpayWebhookPayload
@@ -174,7 +182,46 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 5. Locate the corresponding GrowthAction
+  // 5. Validate Currency against authoritative Merchant.currency
+  const incomingCurrency = (paymentLink.currency || "").trim().toUpperCase();
+  const merchantCurrency = (merchant.currency || "INR").trim().toUpperCase();
+  if (incomingCurrency !== merchantCurrency) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `Currency mismatch: payment link currency is '${incomingCurrency}', but merchant currency is '${merchantCurrency}'`,
+    };
+  }
+
+  // 6. Validate Payment Link Status & Amounts
+  if (paymentLink.status !== "paid") {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `Payment link status is '${paymentLink.status}', expected 'paid'`,
+    };
+  }
+
+  if (typeof paymentLink.amount !== "number" || paymentLink.amount <= 0) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: "Invalid payment link amount in payload",
+    };
+  }
+
+  if (
+    typeof paymentLink.amount_paid !== "number" ||
+    paymentLink.amount_paid < paymentLink.amount
+  ) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `Amount paid (${paymentLink.amount_paid} paise) is less than link amount (${paymentLink.amount} paise)`,
+    };
+  }
+
+  // 7. Locate the corresponding GrowthAction
   let growthAction = null;
 
   if (growthActionId) {
@@ -227,8 +274,7 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 6. Strict business validations BEFORE state modification
-  // 6a. Validate merchant ownership
+  // 8. Strict Merchant Ownership & Lifecycle Checks
   if (growthAction.merchantId !== merchantId) {
     return {
       success: false,
@@ -237,7 +283,14 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 6b. Validate opportunity association if present
+  if (growthAction.status === GrowthActionStatus.REJECTED) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: "Cannot confirm payment for rejected GrowthAction",
+    };
+  }
+
   if (opportunityId && growthAction.opportunityId !== opportunityId) {
     return {
       success: false,
@@ -246,7 +299,6 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 6c. Validate customer if specified
   if (customerId) {
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, merchantId },
@@ -260,8 +312,37 @@ export async function handlePaymentLinkWebhook(
     }
   }
 
-  // 6d. Validate target product and authoritative DB price
-  const expectedProductId = targetProductId || growthAction.opportunity?.targetProductId;
+  // 9. Exact Payment Link ID Verification
+  // Safely parse persisted GrowthAction parameters and require exact paymentLinkId match
+  const paramsResult = safeParseGrowthActionParameters(growthAction.parameters);
+  if (!paramsResult.success) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `Malformed GrowthAction parameters: ${paramsResult.error.message}`,
+    };
+  }
+  const params = paramsResult.data;
+
+  if (!params.paymentLinkId || typeof params.paymentLinkId !== "string") {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `GrowthAction '${growthAction.id}' has no persisted paymentLinkId to bind against payment link '${paymentLink.id}'`,
+    };
+  }
+
+  if (params.paymentLinkId !== paymentLink.id) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `Payment link ID mismatch: GrowthAction '${growthAction.id}' is bound to payment link '${params.paymentLinkId}', but webhook reported '${paymentLink.id}'`,
+    };
+  }
+
+  // 10. Authoritative Target Product & Price Verification
+  const expectedProductId =
+    targetProductId || params.targetProductId || growthAction.opportunity?.targetProductId;
   if (!expectedProductId) {
     return {
       success: false,
@@ -293,32 +374,6 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 6e. Validate payment status and amounts
-  if (paymentLink.status !== "paid") {
-    return {
-      success: false,
-      statusCode: 422,
-      error: `Payment link status is '${paymentLink.status}', expected 'paid'`,
-    };
-  }
-
-  if (typeof paymentLink.amount !== "number" || paymentLink.amount <= 0) {
-    return {
-      success: false,
-      statusCode: 422,
-      error: "Invalid payment link amount in payload",
-    };
-  }
-
-  if (typeof paymentLink.amount_paid !== "number" || paymentLink.amount_paid < paymentLink.amount) {
-    return {
-      success: false,
-      statusCode: 422,
-      error: `Amount paid (${paymentLink.amount_paid} paise) is less than link amount (${paymentLink.amount} paise)`,
-    };
-  }
-
-  // Authoritative check against database product price (convert rupees to paise)
   const expectedPriceInPaise = Math.round(Number(targetProduct.price) * 100);
   if (paymentLink.amount !== expectedPriceInPaise) {
     return {
@@ -328,59 +383,69 @@ export async function handlePaymentLinkWebhook(
     };
   }
 
-  // 7. Idempotency Check: Prevent duplicate execution and duplicate audit logs
-  if (growthAction.status === GrowthActionStatus.EXECUTED) {
-    const existingAudit = await prisma.auditEvent.findFirst({
+  // 11. Atomic Database Updates with Transaction Advisory Lock
+  const lockKey = `webhook_payment_lock:${merchantId}:${paymentLink.id}`;
+
+  return await prisma.$transaction(async (tx) => {
+    // 11a. Acquire PostgreSQL transaction-level advisory lock on (merchantId, paymentLinkId)
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+    // 11b. Re-check inside transaction under lock: Has this payment link already been recorded?
+    const existingAuditByPaymentLinkId = await tx.auditEvent.findFirst({
       where: {
-        actionId: growthAction.id,
+        merchantId,
         eventType: "PAYMENT_LINK_PAID",
+        metadata: {
+          path: ["paymentLinkId"],
+          equals: paymentLink.id,
+        },
       },
     });
 
-    if (existingAudit) {
+    if (existingAuditByPaymentLinkId) {
       return {
         success: true,
         statusCode: 200,
         isDuplicate: true,
         actionId: growthAction.id,
-        message: "GrowthAction already marked EXECUTED and payment confirmed (idempotent duplicate)",
+        message: "Payment link event already recorded in audit trail (idempotent duplicate)",
       };
     }
-  }
 
-  const existingAuditByPaymentLinkId = await prisma.auditEvent.findFirst({
-    where: {
-      merchantId,
-      eventType: "PAYMENT_LINK_PAID",
-      metadata: {
-        path: ["paymentLinkId"],
-        equals: paymentLink.id,
-      },
-    },
-  });
+    // 11c. Re-check fresh action status inside transaction
+    const freshAction = await tx.growthAction.findUnique({
+      where: { id: growthAction.id },
+    });
 
-  if (existingAuditByPaymentLinkId) {
-    return {
-      success: true,
-      statusCode: 200,
-      isDuplicate: true,
-      actionId: growthAction.id,
-      message: "Payment link event already recorded in audit trail (idempotent duplicate)",
-    };
-  }
+    if (freshAction?.status === GrowthActionStatus.EXECUTED) {
+      const actionPaidAudit = await tx.auditEvent.findFirst({
+        where: {
+          actionId: growthAction.id,
+          eventType: "PAYMENT_LINK_PAID",
+        },
+      });
 
-  // 8. Atomic Database Updates
-  await prisma.$transaction(async (tx) => {
-    // 8a. Update GrowthAction status to EXECUTED
+      if (actionPaidAudit) {
+        return {
+          success: true,
+          statusCode: 200,
+          isDuplicate: true,
+          actionId: growthAction.id,
+          message: "GrowthAction already marked EXECUTED and payment confirmed (idempotent duplicate)",
+        };
+      }
+    }
+
+    // 11d. Atomically update GrowthAction status to EXECUTED
     await tx.growthAction.update({
       where: { id: growthAction.id },
       data: {
         status: GrowthActionStatus.EXECUTED,
-        executedAt: new Date(),
+        executedAt: freshAction?.executedAt || new Date(),
       },
     });
 
-    // 8b. Create AuditEvent recording the verified payment confirmation
+    // 11e. Record single authoritative PAYMENT_LINK_PAID audit event
     await tx.auditEvent.create({
       data: {
         merchantId: merchant.id,
@@ -403,13 +468,13 @@ export async function handlePaymentLinkWebhook(
         },
       },
     });
-  });
 
-  return {
-    success: true,
-    statusCode: 200,
-    isDuplicate: false,
-    actionId: growthAction.id,
-    message: `Payment confirmed for GrowthAction ${growthAction.id}. Status updated to EXECUTED.`,
-  };
+    return {
+      success: true,
+      statusCode: 200,
+      isDuplicate: false,
+      actionId: growthAction.id,
+      message: `Payment confirmed for GrowthAction ${growthAction.id}. Status updated to EXECUTED.`,
+    };
+  });
 }
