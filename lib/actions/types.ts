@@ -92,6 +92,7 @@ export interface IsCustomerEligibleInput {
   targetProductId: string;
   merchantId?: string;
   opportunityId?: string;
+  client?: any;
 }
 
 export interface DuplicateActionCheckInput {
@@ -99,6 +100,7 @@ export interface DuplicateActionCheckInput {
   opportunityId: string;
   customerId: string;
   excludeActionId?: string;
+  client?: any;
 }
 
 export interface CreateGrowthActionInput {

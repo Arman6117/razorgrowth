@@ -16,16 +16,18 @@ export async function isCustomerEligible({
   targetProductId,
   merchantId,
   opportunityId,
+  client = prisma,
 }: IsCustomerEligibleInput): Promise<boolean> {
   if (!customerId?.trim() || !targetProductId?.trim()) {
     return false;
   }
 
+  const db = client || prisma;
   let effectiveSourceProductId = sourceProductId;
   let effectiveTargetProductId = targetProductId;
 
   if (opportunityId && (!effectiveSourceProductId || !effectiveTargetProductId)) {
-    const opp = await prisma.opportunity.findUnique({
+    const opp = await db.opportunity.findUnique({
       where: { id: opportunityId },
       select: { sourceProductId: true, targetProductId: true },
     });
@@ -45,7 +47,7 @@ export async function isCustomerEligible({
 
   // 1. If sourceProductId is required, check customer purchased it with PAID status
   if (effectiveSourceProductId) {
-    const sourceOrder = await prisma.order.findFirst({
+    const sourceOrder = await db.order.findFirst({
       where: {
         customerId,
         ...(merchantId ? { merchantId } : {}),
@@ -64,7 +66,7 @@ export async function isCustomerEligible({
   }
 
   // 2. Check customer has NOT purchased target product in any PAID order
-  const targetOrder = await prisma.order.findFirst({
+  const targetOrder = await db.order.findFirst({
     where: {
       customerId,
       ...(merchantId ? { merchantId } : {}),
@@ -83,7 +85,7 @@ export async function isCustomerEligible({
 
   // 3. If opportunityId is provided, check customer has NOT already completed/paid an EXECUTED GrowthAction for this opportunity
   if (opportunityId) {
-    const completedAction = await prisma.growthAction.findFirst({
+    const completedAction = await db.growthAction.findFirst({
       where: {
         ...(merchantId ? { merchantId } : {}),
         opportunityId,

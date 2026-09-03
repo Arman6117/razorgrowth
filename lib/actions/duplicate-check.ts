@@ -12,8 +12,10 @@ export async function duplicateActionCheck({
   opportunityId,
   customerId,
   excludeActionId,
+  client = prisma,
 }: DuplicateActionCheckInput) {
-  const existingAction = await prisma.growthAction.findFirst({
+  const db = client || prisma;
+  const existingAction = await db.growthAction.findFirst({
     where: {
       merchantId,
       opportunityId,
