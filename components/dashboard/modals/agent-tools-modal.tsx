@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Bot, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OpportunityItem } from "@/lib/dashboard/types";
@@ -6,21 +6,46 @@ import { OpportunityItem } from "@/lib/dashboard/types";
 interface AgentToolsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  runningTool: boolean;
-  agentOutput: string | null;
+  merchantId?: string | null;
   opportunities: OpportunityItem[];
-  onRunAgentTool: (toolName: string, params: Record<string, unknown>) => void;
+  onToolExecuted?: () => void;
 }
 
 export function AgentToolsModal({
   isOpen,
   onClose,
-  runningTool,
-  agentOutput,
+  merchantId,
   opportunities,
-  onRunAgentTool,
+  onToolExecuted,
 }: AgentToolsModalProps) {
+  const [runningTool, setRunningTool] = useState(false);
+  const [agentOutput, setAgentOutput] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const handleRunAgentTool = async (toolName: string, params: Record<string, unknown>) => {
+    if (!merchantId) return;
+    setRunningTool(true);
+    setAgentOutput(null);
+    try {
+      const res = await fetch("/api/agent/tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toolName,
+          parameters: { merchantId, ...params },
+        }),
+      });
+
+      const data = await res.json();
+      setAgentOutput(JSON.stringify(data, null, 2));
+      onToolExecuted?.();
+    } catch (err) {
+      setAgentOutput(JSON.stringify({ error: String(err) }, null, 2));
+    } finally {
+      setRunningTool(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end">
@@ -55,7 +80,7 @@ export function AgentToolsModal({
                 variant="outline"
                 size="sm"
                 disabled={runningTool}
-                onClick={() => onRunAgentTool("analyzeCrossSell", {})}
+                onClick={() => handleRunAgentTool("analyzeCrossSell", {})}
                 className="justify-start text-xs font-mono"
               >
                 1. tool: analyzeCrossSell()
@@ -67,7 +92,7 @@ export function AgentToolsModal({
                   size="sm"
                   disabled={runningTool}
                   onClick={() =>
-                    onRunAgentTool("isCustomerEligible", {
+                    handleRunAgentTool("isCustomerEligible", {
                       customerId: opportunities[0].eligibleCustomerIds[0],
                       targetProductId: opportunities[0].targetProductId,
                       sourceProductId: opportunities[0].sourceProductId,
@@ -85,7 +110,7 @@ export function AgentToolsModal({
                   size="sm"
                   disabled={runningTool}
                   onClick={() =>
-                    onRunAgentTool("createGrowthAction", {
+                    handleRunAgentTool("createGrowthAction", {
                       opportunityId: opportunities[0].id,
                       customerId: opportunities[0].eligibleCustomerIds[0],
                       targetProductId: opportunities[0].targetProductId,

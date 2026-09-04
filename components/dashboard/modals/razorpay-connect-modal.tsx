@@ -1,29 +1,59 @@
-import React from "react";
+import React, { useState } from "react";
 import { Key, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface RazorpayConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  connectKeyId: string;
-  setConnectKeyId: (val: string) => void;
-  connectKeySecret: string;
-  setConnectKeySecret: (val: string) => void;
-  connecting: boolean;
-  onConnect: (e: React.FormEvent) => void;
+  onSuccess?: () => void;
+  showToast?: (type: "success" | "error" | "info", message: string) => void;
 }
 
 export function RazorpayConnectModal({
   isOpen,
   onClose,
-  connectKeyId,
-  setConnectKeyId,
-  connectKeySecret,
-  setConnectKeySecret,
-  connecting,
-  onConnect,
+  onSuccess,
+  showToast,
 }: RazorpayConnectModalProps) {
+  const [connectKeyId, setConnectKeyId] = useState("");
+  const [connectKeySecret, setConnectKeySecret] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
   if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!connectKeyId.trim() || !connectKeySecret.trim()) {
+      showToast?.("error", "Please provide both Razorpay Key ID and Key Secret.");
+      return;
+    }
+
+    setConnecting(true);
+    try {
+      const res = await fetch("/api/razorpay/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyId: connectKeyId.trim(),
+          keySecret: connectKeySecret.trim(),
+          mode: "TEST",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to validate Razorpay credentials");
+      }
+      showToast?.("success", "Razorpay Test Mode connected successfully!");
+      setConnectKeyId("");
+      setConnectKeySecret("");
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      showToast?.("error", err instanceof Error ? err.message : "Failed to connect Razorpay");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -49,7 +79,7 @@ export function RazorpayConnectModal({
           Provide your Razorpay Test Key ID and Key Secret. Credentials are encrypted at rest using AES-256-GCM.
         </p>
 
-        <form onSubmit={onConnect} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
               Key ID
