@@ -1,62 +1,47 @@
-import React, { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { RazorpayConnectionInfo } from "@/lib/dashboard/types";
 
 interface UseRazorpayOptions {
-  showToast: (type: "success" | "error" | "info", message: string) => void;
-  onRefresh: () => void;
+  showToast?: (type: "success" | "error" | "info", message: string) => void;
+  onRefresh?: () => void;
 }
 
-export function useRazorpay({ showToast, onRefresh }: UseRazorpayOptions) {
-  const [connectKeyId, setConnectKeyId] = useState("");
-  const [connectKeySecret, setConnectKeySecret] = useState("");
-  const [connecting, setConnecting] = useState(false);
+export function useRazorpay(options: UseRazorpayOptions = {}) {
+  const { showToast, onRefresh } = options;
+  const [connectionInfo, setConnectionInfo] = useState<RazorpayConnectionInfo | null>(null);
+  const [loadingConnection, setLoadingConnection] = useState(false);
   const [syncingType, setSyncingType] = useState<"customers" | "orders" | "all" | null>(null);
 
-  const handleConnectRazorpay = async (e: React.FormEvent, onSuccess?: () => void) => {
-    e.preventDefault();
-    if (!connectKeyId.trim() || !connectKeySecret.trim()) {
-      showToast("error", "Please provide both Razorpay Key ID and Key Secret.");
-      return;
-    }
-
-    setConnecting(true);
+  const loadConnection = useCallback(async () => {
     try {
-      const res = await fetch("/api/razorpay/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          keyId: connectKeyId.trim(),
-          keySecret: connectKeySecret.trim(),
-          mode: "TEST",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to validate Razorpay credentials");
+      setLoadingConnection(true);
+      const res = await fetch("/api/razorpay/connection");
+      if (res.ok) {
+        const data = await res.json();
+        setConnectionInfo(data);
       }
-      showToast("success", "Razorpay Test Mode connected successfully!");
-      setConnectKeyId("");
-      setConnectKeySecret("");
-      if (onSuccess) {
-        onSuccess();
-      }
-      onRefresh();
-    } catch (err) {
-      showToast("error", err instanceof Error ? err.message : "Failed to connect Razorpay");
+    } catch {
+      // Non-critical background fetch failure
     } finally {
-      setConnecting(false);
+      setLoadingConnection(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadConnection();
+  }, [loadConnection]);
 
   const handleDisconnectRazorpay = async () => {
     if (!confirm("Are you sure you want to disconnect Razorpay?")) return;
     try {
       const res = await fetch("/api/razorpay/connect", { method: "DELETE" });
       if (res.ok) {
-        showToast("info", "Razorpay account disconnected.");
-        onRefresh();
+        showToast?.("info", "Razorpay account disconnected.");
+        loadConnection();
+        onRefresh?.();
       }
     } catch {
-      showToast("error", "Failed to disconnect Razorpay");
+      showToast?.("error", "Failed to disconnect Razorpay");
     }
   };
 
@@ -78,29 +63,36 @@ export function useRazorpay({ showToast, onRefresh }: UseRazorpayOptions) {
       }
 
       if (type === "customers") {
-        showToast("success", `Customers synced: ${data.syncedCount} new, ${data.updatedCount} updated (${data.totalFound} found).`);
+        showToast?.(
+          "success",
+          `Customers synced: ${data.syncedCount} new, ${data.updatedCount} updated (${data.totalFound} found).`
+        );
       } else if (type === "orders") {
-        showToast("success", `Orders synced: ${data.syncedCount} new (${data.totalFound} found).`);
+        showToast?.(
+          "success",
+          `Orders synced: ${data.syncedCount} new (${data.totalFound} found).`
+        );
       } else {
-        showToast("success", `Data sync complete: ${data.customers?.totalFound || 0} customers, ${data.orders?.totalFound || 0} orders.`);
+        showToast?.(
+          "success",
+          `Data sync complete: ${data.customers?.totalFound || 0} customers, ${data.orders?.totalFound || 0} orders.`
+        );
       }
 
-      onRefresh();
+      loadConnection();
+      onRefresh?.();
     } catch (err) {
-      showToast("error", err instanceof Error ? err.message : `Failed to sync ${type}`);
+      showToast?.("error", err instanceof Error ? err.message : `Failed to sync ${type}`);
     } finally {
       setSyncingType(null);
     }
   };
 
   return {
-    connectKeyId,
-    setConnectKeyId,
-    connectKeySecret,
-    setConnectKeySecret,
-    connecting,
+    connectionInfo,
+    loadingConnection,
+    loadConnection,
     syncingType,
-    handleConnectRazorpay,
     handleDisconnectRazorpay,
     handleSyncData,
   };
