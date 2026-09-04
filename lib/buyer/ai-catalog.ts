@@ -35,6 +35,46 @@ export interface AIBuyerCatalogResponse {
   products: AIBuyerProduct[];
 }
 
+export class PublicCatalogError extends Error {
+  public statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = "PublicCatalogError";
+    this.statusCode = statusCode;
+  }
+}
+
+export interface AIPublicProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  price: number;
+  currency: string;
+  active: true;
+  jsonLd?: Record<string, unknown>;
+}
+
+export interface AIPublicCatalogResponse {
+  success: true;
+  merchant: {
+    name: string;
+    currency: string;
+    slug: string;
+  };
+  totalProducts: number;
+  products: AIPublicProduct[];
+}
+
+export interface PublicMerchantInfo {
+  id: string;
+  name: string;
+  currency: string;
+  slug: string;
+}
+
+
 export interface AIBuyerReadinessReport {
   merchantId: string;
   readinessScore: number; // 0 - 100
@@ -189,20 +229,18 @@ export async function getAIBuyerCatalog(
     };
 
     if (options?.includeJsonLd) {
-      item.jsonLd = {
-        "@context": "https://schema.org/",
-        "@type": "Product",
-        identifier: p.id,
-        name: p.name,
-        description: p.description || undefined,
-        category: p.category || undefined,
-        offers: {
-          "@type": "Offer",
+      item.jsonLd = buildProductJsonLd(
+        {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          category: p.category,
           price: priceNum,
-          priceCurrency: currency,
-          availability: p.active ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+          active: p.active,
         },
-      };
+        currency,
+        { includeAvailability: true }
+      );
     }
 
     return item;
@@ -244,6 +282,223 @@ export async function getAIBuyerCatalog(
     products: structuredProducts,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 1B. CANONICAL JSON-LD & SAFE PUBLIC CATALOG
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical JSON-LD builder for machine-readable products.
+ * Strictly maps from authoritative database values without fabricating
+ * synthetic inventory, fake availability, or hallucinated reviews/ratings.
+ */
+export function buildProductJsonLd(
+  product: {
+    id: string;
+    name: string;
+    description?: string | null;
+    category?: string | null;
+    price: number;
+    active?: boolean;
+  },
+  currency: string,
+  options?: {
+    includeAvailability?: boolean;
+  }
+): Record<string, unknown> {
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org/",
+    "@type": "Product",
+    identifier: product.id,
+    name: product.name,
+    offers: {
+      "@type": "Offer",
+      price: product.price,
+      priceCurrency: currency,
+    },
+  };
+
+  if (product.description) {
+    jsonLd.description = product.description;
+  }
+  if (product.category) {
+    jsonLd.category = product.category;
+  }
+
+  // Only include availability when explicitly requested by private dashboard API
+  if (options?.includeAvailability && product.active !== undefined) {
+    (jsonLd.offers as Record<string, unknown>).availability = product.active
+      ? "https://schema.org/InStock"
+      : "https://schema.org/OutOfStock";
+  }
+
+  return jsonLd;
+}
+
+/**
+ * Normalizes a merchant store name into a URL-safe public slug.
+ */
+export function slugifyMerchantName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Safely resolves a merchant for public catalog discovery without exposing internal IDs.
+ * Supports resolution by public slug, merchant ID, or exact store name.
+ */
+export async function resolvePublicMerchant(
+  identifier: string
+): Promise<PublicMerchantInfo | null> {
+  if (!identifier || typeof identifier !== "string") return null;
+  const clean = identifier.trim();
+  if (!clean) return null;
+
+  // 1. Direct ID lookup (authoritative DB cuid)
+  const byId = await prisma.merchant.findUnique({
+    where: { id: clean },
+    select: { id: true, name: true, currency: true },
+  });
+  if (byId) {
+    return {
+      id: byId.id,
+      name: byId.name,
+      currency: byId.currency || "INR",
+      slug: slugifyMerchantName(byId.name),
+    };
+  }
+
+  // 2. Direct name match (e.g., if identifier matches store name)
+  const nameCandidate = clean.replace(/-/g, " ");
+  const byName = await prisma.merchant.findFirst({
+    where: {
+      name: {
+        equals: nameCandidate,
+        mode: "insensitive",
+      },
+    },
+    select: { id: true, name: true, currency: true },
+  });
+  if (byName) {
+    return {
+      id: byName.id,
+      name: byName.name,
+      currency: byName.currency || "INR",
+      slug: slugifyMerchantName(byName.name),
+    };
+  }
+
+  // 3. Match across merchants via normalized slug
+  const merchants = await prisma.merchant.findMany({
+    select: { id: true, name: true, currency: true },
+    take: 100,
+  });
+  const matched = merchants.find(
+    (m) => slugifyMerchantName(m.name) === clean.toLowerCase()
+  );
+  if (matched) {
+    return {
+      id: matched.id,
+      name: matched.name,
+      currency: matched.currency || "INR",
+      slug: slugifyMerchantName(matched.name),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Returns an unauthenticated, strictly allowlisted, machine-readable product catalog
+ * for external AI buyers.
+ * 
+ * BOUNDARY RULES:
+ * 1. Read-only: performs zero mutations, charges zero funds, creates zero actions.
+ * 2. Active products only: inactive products are strictly excluded.
+ * 3. Strictly allowlisted: zero customer PII, zero credentials, zero internal operational metadata.
+ * 4. Authoritative price: always uses Product.price from PostgreSQL.
+ * 5. Grounded JSON-LD: reuses canonical builder without fabricated schema.org inventory.
+ */
+export async function getAIPublicCatalog(
+  identifier: string,
+  options?: {
+    includeJsonLd?: boolean;
+  }
+): Promise<AIPublicCatalogResponse> {
+  if (!identifier?.trim()) {
+    throw new PublicCatalogError("Merchant identifier parameter is required", 400);
+  }
+
+  const merchant = await resolvePublicMerchant(identifier);
+  if (!merchant) {
+    throw new PublicCatalogError(`Merchant not found with identifier: '${identifier}'`, 404);
+  }
+
+  const currency = merchant.currency || "INR";
+  const includeJsonLd = options?.includeJsonLd !== false;
+
+  // STRICT PRISMA SELECT: ONLY ACTIVE PRODUCTS, ONLY SAFE PUBLIC FIELDS
+  const products = await prisma.product.findMany({
+    where: {
+      merchantId: merchant.id,
+      active: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      category: true,
+      price: true,
+      active: true,
+    },
+  });
+
+  const publicProducts: AIPublicProduct[] = products.map((p) => {
+    const priceNum = Number(p.price);
+    const item: AIPublicProduct = {
+      id: p.id,
+      name: p.name,
+      description: p.description ?? null,
+      category: p.category ?? null,
+      price: priceNum,
+      currency,
+      active: true,
+    };
+
+    if (includeJsonLd) {
+      item.jsonLd = buildProductJsonLd(
+        {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          category: p.category,
+          price: priceNum,
+          active: true,
+        },
+        currency,
+        { includeAvailability: false }
+      );
+    }
+
+    return item;
+  });
+
+  return {
+    success: true,
+    merchant: {
+      name: merchant.name,
+      currency,
+      slug: merchant.slug,
+    },
+    totalProducts: publicProducts.length,
+    products: publicProducts,
+  };
+}
+
 
 // ---------------------------------------------------------------------------
 // 2. AI BUYER READINESS SCORE CALCULATION

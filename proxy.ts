@@ -4,11 +4,12 @@ import type { NextRequest } from "next/server";
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Allow public static assets and auth/webhook APIs
+  // 1. Allow public static assets, auth/webhook APIs, and public AI buyer catalog
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks") ||
+    pathname.startsWith("/api/ai/catalog/public") ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();

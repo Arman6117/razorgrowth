@@ -82,9 +82,9 @@ async function verifyProxyInterception() {
     console.log("   ✅ Authenticated user visiting auth pages correctly redirected to dashboard.\n");
 
     // -------------------------------------------------------------------------
-    // Flow E: Public /api/auth and /api/webhooks bypassed by proxy
+    // Flow E: Public /api/auth, /api/webhooks, and /api/ai/catalog/public bypassed by proxy
     // -------------------------------------------------------------------------
-    console.log("🌐 Flow E: Public Webhooks & Auth APIs -> Expected: Allowed through");
+    console.log("🌐 Flow E: Public Webhooks, Auth APIs & Public AI Catalog -> Expected: Allowed through");
     const reqE1 = new NextRequest("http://localhost:3000/api/auth/login", { method: "POST" });
     const resE1 = proxy(reqE1);
     console.log(`   /api/auth/login -> Location: ${resE1.headers.get("location") || "None (Allowed through)"}`);
@@ -93,8 +93,12 @@ async function verifyProxyInterception() {
     const resE2 = proxy(reqE2);
     console.log(`   /api/webhooks/razorpay -> Location: ${resE2.headers.get("location") || "None (Allowed through)"}`);
 
-    if (resE1.headers.get("location") || resE2.headers.get("location")) {
-      throw new Error("Public auth/webhook endpoints should not be redirected by proxy");
+    const reqE3 = new NextRequest("http://localhost:3000/api/ai/catalog/public", { method: "GET" });
+    const resE3 = proxy(reqE3);
+    console.log(`   /api/ai/catalog/public -> Location: ${resE3.headers.get("location") || "None (Allowed through)"}`);
+
+    if (resE1.headers.get("location") || resE2.headers.get("location") || resE3.headers.get("location")) {
+      throw new Error("Public auth/webhook/public-catalog endpoints should not be redirected by proxy");
     }
     console.log("   ✅ Public routes correctly bypassed by proxy.\n");
 

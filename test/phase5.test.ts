@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { prisma } from "../lib/prisma";
 import {
   getAIBuyerCatalog,
+  getAIPublicCatalog,
+  slugifyMerchantName,
   calculateAIBuyerReadiness,
   calculateReadinessScore,
   discoverProductsForAIBuyer,
@@ -24,11 +26,13 @@ import {
   AuditActor,
 } from "../lib/generated/prisma/enums";
 import { GET as catalogRoute } from "../app/api/ai/catalog/route";
+import { GET as publicCatalogRoute } from "../app/api/ai/catalog/public/route";
 import { GET as productsRoute } from "../app/api/ai/products/route";
 import { GET as readinessRoute } from "../app/api/ai/readiness/route";
 import { POST as discoverRoute } from "../app/api/ai/discover/route";
 import { POST as purchaseIntentRoute } from "../app/api/ai/purchase-intent/route";
 import { createSession } from "../lib/auth/session";
+import { proxy } from "../proxy";
 import { NextRequest } from "next/server";
 
 describe("PHASE 5 — AI BUYER READINESS & AGENTIC COMMERCE", () => {
@@ -584,4 +588,248 @@ describe("PHASE 5 — AI BUYER READINESS & AGENTIC COMMERCE", () => {
     });
     assert.equal(finalizedAction?.status, GrowthActionStatus.EXECUTED);
   });
+
+  // ---------------------------------------------------------------------------
+  // PHASE 5 HARDENING — SAFE PUBLIC AI BUYER CATALOG TESTS
+  // ---------------------------------------------------------------------------
+
+  it("L: Public Access — Public catalog works without merchant session and passes proxy", async () => {
+    // 1. NextRequest to public catalog without any auth cookie or bearer header
+    const req = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`);
+    
+    // Verify proxy allows request through without 401 redirect or unauthorized response
+    const proxyRes = proxy(req);
+    assert.equal(proxyRes.status, 200, "Proxy must allow public AI catalog request through");
+
+    // Execute route handler directly
+    const res = await publicCatalogRoute(req);
+    assert.equal(res.status, 200);
+
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.merchant.name, "Phase5 Store Alpha");
+    assert.equal(data.merchant.currency, "INR");
+    assert.equal(data.merchant.slug, "phase5-store-alpha");
+    assert.ok(Array.isArray(data.products));
+    assert.ok(data.totalProducts > 0);
+  });
+
+  it("M: Product Filtering — Inactive products are strictly excluded from public catalog", async () => {
+    const req = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`);
+    const res = await publicCatalogRoute(req);
+    assert.equal(res.status, 200);
+
+    const data = await res.json();
+    const productIds = data.products.map((p: { id: string }) => p.id);
+
+    // Active products must be present
+    assert.ok(productIds.includes(productA1Id), "Active product A1 must be present");
+    assert.ok(productIds.includes(productA2Id), "Active product A2 must be present");
+    assert.ok(productIds.includes(productA3Id), "Active product A3 must be present");
+
+    // Inactive product must be excluded
+    assert.equal(
+      productIds.includes(productA4Id),
+      false,
+      "Inactive product A4 must NOT be included in public catalog"
+    );
+
+    // Total products count must match active items only
+    assert.equal(data.totalProducts, 3);
+    for (const prod of data.products) {
+      assert.equal(prod.active, true, "Every returned product must have active === true");
+    }
+  });
+
+  it("N: Strict Allowlist & Zero Sensitive Data Leakage — Private data never appears in public response", async () => {
+    const req = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`);
+    const res = await publicCatalogRoute(req);
+    const rawText = await res.text();
+    const data = JSON.parse(rawText);
+
+    // 1. Zero credential / secret leakage
+    assert.equal(rawText.includes("passwordHash"), false);
+    assert.equal(rawText.includes("hashed_secret"), false);
+    assert.equal(rawText.includes("sessionToken"), false);
+    assert.equal(rawText.includes("keySecret"), false);
+    assert.equal(rawText.includes("encryptedKeySecret"), false);
+    assert.equal(rawText.includes("rzp_test_"), false);
+
+    // 2. Zero customer PII or customer data leakage
+    assert.equal(rawText.includes("customerEmail"), false);
+    assert.equal(rawText.includes("customerId"), false);
+    assert.equal(rawText.includes("Phase5 Cust Alpha"), false);
+    assert.equal(rawText.includes("cust_p5_"), false);
+
+    // 3. Zero order / operational data leakage
+    assert.equal(rawText.includes("orderId"), false);
+    assert.equal(rawText.includes("growthActionId"), false);
+    assert.equal(rawText.includes("opportunityId"), false);
+    assert.equal(rawText.includes("auditEvent"), false);
+
+    // 4. Raw database Merchant.id must not be exposed in merchant metadata
+    assert.equal(data.merchant.id, undefined, "Raw Merchant cuid must not be exposed in merchant object");
+    assert.equal(data.merchant.email, undefined, "Merchant private email must not be exposed");
+
+    // 5. Check strictly allowlisted keys in product objects
+    for (const prod of data.products) {
+      const keys = Object.keys(prod);
+      const allowedKeys = new Set(["id", "name", "description", "category", "price", "currency", "active", "jsonLd"]);
+      for (const k of keys) {
+        assert.ok(allowedKeys.has(k), `Unexpected field '${k}' in public product output`);
+      }
+      assert.equal(prod.merchantId, undefined, "merchantId must not be exposed on products");
+      assert.equal(prod.createdAt, undefined, "Internal timestamps must not be exposed");
+      assert.equal(prod.updatedAt, undefined, "Internal timestamps must not be exposed");
+    }
+  });
+
+  it("O: Authoritative Price & Currency — Returned price equals Product.price and currency matches configuration", async () => {
+    const req = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`);
+    const res = await publicCatalogRoute(req);
+    const data = await res.json();
+
+    const sleeve = data.products.find((p: { id: string }) => p.id === productA1Id);
+    assert.ok(sleeve);
+    assert.equal(sleeve.price, 1500);
+    assert.equal(sleeve.currency, "INR");
+
+    const mouse = data.products.find((p: { id: string }) => p.id === productA2Id);
+    assert.ok(mouse);
+    assert.equal(mouse.price, 800);
+    assert.equal(mouse.currency, "INR");
+
+    const cable = data.products.find((p: { id: string }) => p.id === productA3Id);
+    assert.ok(cable);
+    assert.equal(cable.price, 299);
+    assert.equal(cable.currency, "INR");
+
+    // Verify directly against PostgreSQL Product record
+    const dbSleeve = await prisma.product.findUniqueOrThrow({ where: { id: productA1Id } });
+    assert.equal(Number(dbSleeve.price), sleeve.price, "Public catalog price must strictly equal Product.price");
+  });
+
+  it("P: Tenant Isolation — Merchant A's catalog cannot contain Merchant B's products and vice versa", async () => {
+    // Merchant A query
+    const resA = await publicCatalogRoute(
+      new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`)
+    );
+    const dataA = await resA.json();
+    const idsA = dataA.products.map((p: { id: string }) => p.id);
+    assert.equal(idsA.includes(productB1Id), false, "Merchant A public catalog must NOT contain Merchant B products");
+
+    // Merchant B query
+    const resB = await publicCatalogRoute(
+      new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantBId}`)
+    );
+    const dataB = await resB.json();
+    const idsB = dataB.products.map((p: { id: string }) => p.id);
+    assert.equal(idsB.includes(productB1Id), true, "Merchant B catalog must contain Merchant B product");
+    assert.equal(idsB.includes(productA1Id), false, "Merchant B catalog must NOT contain Merchant A product");
+  });
+
+  it("Q: Safe Merchant Resolution & Unknown Merchant Handling — Resolves by ID/slug/name and returns 404 for unknown merchant", async () => {
+    // 1. Query by slug
+    const slugRes = await publicCatalogRoute(
+      new NextRequest("http://localhost:3000/api/ai/catalog/public?slug=phase5-store-alpha")
+    );
+    assert.equal(slugRes.status, 200);
+    const slugData = await slugRes.json();
+    assert.equal(slugData.merchant.name, "Phase5 Store Alpha");
+
+    // 2. Query by 'merchant' parameter (auto-detects slug/id)
+    const merchantParamRes = await publicCatalogRoute(
+      new NextRequest("http://localhost:3000/api/ai/catalog/public?merchant=phase5-store-alpha")
+    );
+    assert.equal(merchantParamRes.status, 200);
+
+    // 3. Unknown merchant ID returns 404
+    const unknownIdRes = await publicCatalogRoute(
+      new NextRequest("http://localhost:3000/api/ai/catalog/public?merchantId=non_existent_merchant_cuid_999")
+    );
+    assert.equal(unknownIdRes.status, 404);
+    const unknownIdJson = await unknownIdRes.json();
+    assert.ok(unknownIdJson.error?.includes("Merchant not found"));
+
+    // 4. Unknown merchant slug returns 404
+    const unknownSlugRes = await publicCatalogRoute(
+      new NextRequest("http://localhost:3000/api/ai/catalog/public?slug=non-existent-store-slug")
+    );
+    assert.equal(unknownSlugRes.status, 404);
+  });
+
+  it("R: Request Validation — Missing/invalid query parameters return 400 with descriptive error", async () => {
+    // Missing all merchant identifiers
+    const emptyReq = new NextRequest("http://localhost:3000/api/ai/catalog/public");
+    const emptyRes = await publicCatalogRoute(emptyReq);
+    assert.equal(emptyRes.status, 400);
+    const emptyJson = await emptyRes.json();
+    assert.ok(emptyJson.error?.includes("merchant identifier"));
+
+    // Invalid includeJsonLd parameter
+    const invalidReq = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}&includeJsonLd=invalid_boolean`);
+    const invalidRes = await publicCatalogRoute(invalidReq);
+    assert.equal(invalidRes.status, 400);
+  });
+
+  it("S: Purchase Safety Boundary — Public catalog access is strictly read-only and cannot trigger payments or approve actions", async () => {
+    const actionCountBefore = await prisma.growthAction.count({ where: { merchantId: merchantAId } });
+    const auditCountBefore = await prisma.auditEvent.count({ where: { merchantId: merchantAId } });
+    const rzpRequestsBefore = capturedRazorpayRequests.length;
+
+    // Perform multiple public catalog reads
+    for (let i = 0; i < 3; i++) {
+      const res = await publicCatalogRoute(
+        new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}`)
+      );
+      assert.equal(res.status, 200);
+    }
+
+    const actionCountAfter = await prisma.growthAction.count({ where: { merchantId: merchantAId } });
+    const auditCountAfter = await prisma.auditEvent.count({ where: { merchantId: merchantAId } });
+    const rzpRequestsAfter = capturedRazorpayRequests.length;
+
+    // Assert zero mutations and zero payment interactions
+    assert.equal(actionCountAfter, actionCountBefore, "Public catalog MUST NOT create or mutate GrowthActions");
+    assert.equal(auditCountAfter, auditCountBefore, "Public catalog read must not pollute audit events");
+    assert.equal(rzpRequestsAfter, rzpRequestsBefore, "Public catalog access MUST NOT call Razorpay API");
+  });
+
+  it("T: JSON-LD Integrity — Contains only grounded schema.org fields without fabricated inventory or availability", async () => {
+    const req = new NextRequest(`http://localhost:3000/api/ai/catalog/public?merchantId=${merchantAId}&includeJsonLd=true`);
+    const res = await publicCatalogRoute(req);
+    assert.equal(res.status, 200);
+
+    const data = await res.json();
+    const sleeve = data.products.find((p: { id: string }) => p.id === productA1Id);
+    assert.ok(sleeve?.jsonLd);
+
+    const ld = sleeve.jsonLd as Record<string, any>;
+    assert.equal(ld["@context"], "https://schema.org/");
+    assert.equal(ld["@type"], "Product");
+    assert.equal(ld.identifier, productA1Id);
+    assert.equal(ld.name, "Ultra Laptop Sleeve 15");
+    assert.ok(ld.description?.includes("15 inch laptops"));
+    assert.equal(ld.category, "Accessories");
+    assert.equal(ld.offers?.["@type"], "Offer");
+    assert.equal(ld.offers?.price, 1500);
+    assert.equal(ld.offers?.priceCurrency, "INR");
+
+    // STRICT GROUNDING CHECKS: No fabricated inventory, availability, reviews, ratings
+    assert.equal(ld.offers?.availability, undefined, "Public JSON-LD must NOT fabricate availability status");
+    assert.equal(ld.inventory, undefined, "Public JSON-LD must NOT fabricate inventory");
+    assert.equal(ld.aggregateRating, undefined, "Public JSON-LD must NOT fabricate aggregateRating");
+    assert.equal(ld.review, undefined, "Public JSON-LD must NOT fabricate reviews");
+    assert.equal(ld.brand, undefined, "Public JSON-LD must NOT fabricate brand when not in schema");
+    assert.equal(ld.shippingDetails, undefined, "Public JSON-LD must NOT fabricate shippingDetails");
+
+    // Product A3 (missing description and category) must not hallucinate fields
+    const cable = data.products.find((p: { id: string }) => p.id === productA3Id);
+    assert.ok(cable?.jsonLd);
+    const cableLd = cable.jsonLd as Record<string, any>;
+    assert.equal(cableLd.description, undefined, "Missing description must remain undefined in JSON-LD");
+    assert.equal(cableLd.category, undefined, "Missing category must remain undefined in JSON-LD");
+    assert.equal(cableLd.offers?.price, 299);
+  });
 });
+
