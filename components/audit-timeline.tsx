@@ -16,14 +16,8 @@ import {
   Mail,
   Send,
 } from "lucide-react";
-
-export interface AuditEventItem {
-  id?: string;
-  eventType: string;
-  actor: string;
-  createdAt: string | Date;
-  metadata?: Record<string, unknown> | null;
-}
+import { AuditEventItem } from "@/lib/dashboard/types";
+export type { AuditEventItem };
 
 interface AuditTimelineProps {
   events: AuditEventItem[];

@@ -1,4 +1,10 @@
-import { AuditEventItem } from "@/components/audit-timeline";
+export interface AuditEventItem {
+  id?: string;
+  eventType: string;
+  actor: string;
+  createdAt: string | Date;
+  metadata?: Record<string, unknown> | null;
+}
 
 export interface MerchantInfo {
   id: string;
