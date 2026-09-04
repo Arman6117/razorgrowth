@@ -45,6 +45,30 @@ export class PublicCatalogError extends Error {
   }
 }
 
+export class PurchaseIntentError extends Error {
+  public statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = "PurchaseIntentError";
+    this.statusCode = statusCode;
+  }
+}
+
+export class PurchaseIntentNotFoundError extends PurchaseIntentError {
+  constructor(message = "Product not found or inaccessible") {
+    super(message, 404);
+    this.name = "PurchaseIntentNotFoundError";
+  }
+}
+
+export class PurchaseIntentInactiveProductError extends PurchaseIntentError {
+  constructor(message = "Product is currently inactive and cannot be purchased") {
+    super(message, 422);
+    this.name = "PurchaseIntentInactiveProductError";
+  }
+}
+
 export interface AIPublicProduct {
   id: string;
   name: string;
@@ -59,6 +83,7 @@ export interface AIPublicProduct {
 export interface AIPublicCatalogResponse {
   success: true;
   merchant: {
+    publicId: string;
     name: string;
     currency: string;
     slug: string;
@@ -69,6 +94,7 @@ export interface AIPublicCatalogResponse {
 
 export interface PublicMerchantInfo {
   id: string;
+  publicId: string;
   name: string;
   currency: string;
   slug: string;
@@ -357,55 +383,86 @@ export async function resolvePublicMerchant(
   const clean = identifier.trim();
   if (!clean) return null;
 
-  // 1. Direct ID lookup (authoritative DB cuid)
+  // 1. Primary: Stable public identifier lookup (Merchant.publicId)
+  const byPublicId = await prisma.merchant.findUnique({
+    where: { publicId: clean },
+    select: { id: true, publicId: true, name: true, currency: true },
+  });
+  if (byPublicId) {
+    return {
+      id: byPublicId.id,
+      publicId: byPublicId.publicId,
+      name: byPublicId.name,
+      currency: byPublicId.currency || "INR",
+      slug: slugifyMerchantName(byPublicId.name),
+    };
+  }
+
+  // 2. Backward-compatible internal/demo fallback: Authoritative DB cuid (Merchant.id)
   const byId = await prisma.merchant.findUnique({
     where: { id: clean },
-    select: { id: true, name: true, currency: true },
+    select: { id: true, publicId: true, name: true, currency: true },
   });
   if (byId) {
     return {
       id: byId.id,
+      publicId: byId.publicId,
       name: byId.name,
       currency: byId.currency || "INR",
       slug: slugifyMerchantName(byId.name),
     };
   }
 
-  // 2. Direct name match (e.g., if identifier matches store name)
+  // 3. Backward-compatible name/slug match, strictly disallowing ambiguity
   const nameCandidate = clean.replace(/-/g, " ");
-  const byName = await prisma.merchant.findFirst({
+  const matchingMerchants = await prisma.merchant.findMany({
     where: {
-      name: {
-        equals: nameCandidate,
-        mode: "insensitive",
-      },
+      OR: [
+        { name: { equals: nameCandidate, mode: "insensitive" } },
+        { name: { equals: clean, mode: "insensitive" } },
+      ],
     },
-    select: { id: true, name: true, currency: true },
+    select: { id: true, publicId: true, name: true, currency: true },
+    take: 3,
   });
-  if (byName) {
+  if (matchingMerchants.length === 1) {
+    const m = matchingMerchants[0];
     return {
-      id: byName.id,
-      name: byName.name,
-      currency: byName.currency || "INR",
-      slug: slugifyMerchantName(byName.name),
+      id: m.id,
+      publicId: m.publicId,
+      name: m.name,
+      currency: m.currency || "INR",
+      slug: slugifyMerchantName(m.name),
     };
+  } else if (matchingMerchants.length > 1) {
+    throw new PublicCatalogError(
+      `Multiple merchants match identifier '${clean}'. Ambiguous resolution is not permitted.`,
+      400
+    );
   }
 
-  // 3. Match across merchants via normalized slug
+  // Match across merchants via normalized slug
   const merchants = await prisma.merchant.findMany({
-    select: { id: true, name: true, currency: true },
+    select: { id: true, publicId: true, name: true, currency: true },
     take: 100,
   });
-  const matched = merchants.find(
+  const slugMatches = merchants.filter(
     (m) => slugifyMerchantName(m.name) === clean.toLowerCase()
   );
-  if (matched) {
+  if (slugMatches.length === 1) {
+    const matched = slugMatches[0];
     return {
       id: matched.id,
+      publicId: matched.publicId,
       name: matched.name,
       currency: matched.currency || "INR",
       slug: slugifyMerchantName(matched.name),
     };
+  } else if (slugMatches.length > 1) {
+    throw new PublicCatalogError(
+      `Multiple merchants match identifier '${clean}'. Ambiguous resolution is not permitted.`,
+      400
+    );
   }
 
   return null;
@@ -490,6 +547,7 @@ export async function getAIPublicCatalog(
   return {
     success: true,
     merchant: {
+      publicId: merchant.publicId,
       name: merchant.name,
       currency,
       slug: merchant.slug,
@@ -1064,7 +1122,7 @@ export async function createAIBuyerPurchaseIntent(input: {
   const { merchantId, productId } = input;
 
   if (!merchantId?.trim() || !productId?.trim()) {
-    throw new Error("merchantId and productId are required parameters");
+    throw new PurchaseIntentError("merchantId and productId are required parameters", 400);
   }
 
   // Authoritatively load product and merchant
@@ -1085,11 +1143,11 @@ export async function createAIBuyerPurchaseIntent(input: {
   });
 
   if (!product) {
-    throw new Error(`Product '${productId}' not found or does not belong to merchant '${merchantId}'`);
+    throw new PurchaseIntentNotFoundError(`Product '${productId}' not found or inaccessible`);
   }
 
   if (!product.active) {
-    throw new Error(`Product '${product.name}' is currently inactive and cannot be purchased`);
+    throw new PurchaseIntentInactiveProductError(`Product '${product.name}' is currently inactive and cannot be purchased`);
   }
 
   const authoritativePrice = Number(product.price);

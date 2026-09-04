@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
  */
 export const PublicCatalogQuerySchema = z
   .object({
-    merchantId: z.string().trim().min(1).optional(),
     merchant: z.string().trim().min(1).optional(),
+    merchantId: z.string().trim().min(1).optional(),
     slug: z.string().trim().min(1).optional(),
     includeJsonLd: z
       .enum(["true", "false"])
@@ -18,9 +18,9 @@ export const PublicCatalogQuerySchema = z
       .transform((val) => val !== "false"),
   })
   .refine(
-    (data) => Boolean(data.merchantId || data.merchant || data.slug),
+    (data) => Boolean(data.merchant || data.merchantId || data.slug),
     {
-      message: "A merchant identifier (merchantId, merchant, or slug) is required",
+      message: "A merchant identifier (merchant, merchantId, or slug) is required",
       path: ["merchant"],
     }
   );
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const queryObj = {
-      merchantId: searchParams.get("merchantId") || undefined,
       merchant: searchParams.get("merchant") || undefined,
+      merchantId: searchParams.get("merchantId") || undefined,
       slug: searchParams.get("slug") || undefined,
       includeJsonLd: searchParams.get("includeJsonLd") || undefined,
     };
@@ -44,12 +44,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { merchantId, merchant, slug, includeJsonLd } = parsed.data;
-    const identifier = merchantId || slug || merchant;
+    const { merchant, merchantId, slug, includeJsonLd } = parsed.data;
+    // Preferred contract: GET /api/ai/catalog/public?merchant=<publicIdentifier>
+    // Backward-compatible demo/internal parameters: slug, merchantId
+    const identifier = merchant || slug || merchantId;
 
     if (!identifier) {
       return NextResponse.json(
-        { error: "A merchant identifier (merchantId, merchant, or slug) is required" },
+        { error: "A merchant identifier (merchant, merchantId, or slug) is required" },
         { status: 400 }
       );
     }

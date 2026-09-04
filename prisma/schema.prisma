@@ -9,6 +9,7 @@ datasource db {
 
 model Merchant {
   id            String         @id @default(cuid())
+  publicId      String         @unique @default(cuid())
   name          String
   email         String         @unique
   passwordHash  String?
