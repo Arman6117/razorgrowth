@@ -3,34 +3,44 @@ import { X, Sparkles, RefreshCw, ShieldCheck, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { OpportunityItem, CustomerItem } from "@/lib/dashboard/types";
+import { useOpportunityCustomers } from "@/hooks/use-opportunity-customers";
+import { useGrowthActionCreation } from "@/hooks/use-growth-action-creation";
 
 interface OpportunityDrawerProps {
   selectedOpportunity: OpportunityItem | null;
-  eligibleCustomers: CustomerItem[];
-  loadingCustomers: boolean;
-  creatingBatchActions: boolean;
-  bulkApproving: boolean;
-  creatingActionForCustomer: string | null;
+  merchantId?: string | null;
   onClose: () => void;
-  onCreateBatchGrowthActions: () => void;
-  onBulkApprove: () => void;
-  onCreateGrowthAction: (customer: CustomerItem) => void;
   onOpenAction: (actionId: string) => void;
+  onActionCreatedOrApproved?: () => void;
+  showToast?: (type: "success" | "error" | "info", message: string) => void;
 }
 
 export function OpportunityDrawer({
   selectedOpportunity,
-  eligibleCustomers,
-  loadingCustomers,
-  creatingBatchActions,
-  bulkApproving,
-  creatingActionForCustomer,
+  merchantId,
   onClose,
-  onCreateBatchGrowthActions,
-  onBulkApprove,
-  onCreateGrowthAction,
   onOpenAction,
+  onActionCreatedOrApproved,
+  showToast,
 }: OpportunityDrawerProps) {
+  const { eligibleCustomers, loadingCustomers, refreshOpportunityCustomers } =
+    useOpportunityCustomers(selectedOpportunity?.id);
+
+  const {
+    creatingActionForCustomer,
+    creatingBatchActions,
+    bulkApproving,
+    createGrowthAction,
+    createBatchGrowthActions,
+    bulkApprove,
+  } = useGrowthActionCreation({
+    showToast,
+    onSuccess: () => {
+      refreshOpportunityCustomers();
+      onActionCreatedOrApproved?.();
+    },
+  });
+
   if (!selectedOpportunity) return null;
 
   const uncreatedCustomers = eligibleCustomers.filter((c) => !c.existingAction);
@@ -41,6 +51,42 @@ export function OpportunityDrawer({
     eligibleCustomers.length > 0 &&
     !loadingCustomers &&
     (uncreatedCustomers.length > 0 || pendingApprovalCustomers.length > 0);
+
+  const handleCreateBatch = async () => {
+    if (!merchantId || !selectedOpportunity) return;
+    const uncreatedCustomerIds = eligibleCustomers
+      .filter((c) => !c.existingAction)
+      .map((c) => c.id);
+    await createBatchGrowthActions({
+      merchantId,
+      opportunityId: selectedOpportunity.id,
+      customerIds: uncreatedCustomerIds,
+      sourceProductId: selectedOpportunity.sourceProductId,
+      targetProductId: selectedOpportunity.targetProductId,
+    });
+  };
+
+  const handleBulkApprove = async () => {
+    if (!merchantId || !selectedOpportunity) return;
+    await bulkApprove(selectedOpportunity.id, merchantId);
+  };
+
+  const handleCreateSingle = async (customer: CustomerItem) => {
+    if (!merchantId || !selectedOpportunity) return;
+    const actionId = await createGrowthAction(
+      {
+        merchantId,
+        opportunityId: selectedOpportunity.id,
+        customerId: customer.id,
+        sourceProductId: selectedOpportunity.sourceProductId,
+        targetProductId: selectedOpportunity.targetProductId,
+      },
+      customer.name
+    );
+    if (actionId) {
+      onOpenAction(actionId);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs flex justify-end transition-opacity">
@@ -96,7 +142,7 @@ export function OpportunityDrawer({
               <div className="flex flex-wrap items-center gap-3">
                 {uncreatedCustomers.length > 0 && (
                   <Button
-                    onClick={onCreateBatchGrowthActions}
+                    onClick={handleCreateBatch}
                     disabled={creatingBatchActions}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
                   >
@@ -116,7 +162,7 @@ export function OpportunityDrawer({
 
                 {pendingApprovalCustomers.length > 0 && (
                   <Button
-                    onClick={onBulkApprove}
+                    onClick={handleBulkApprove}
                     disabled={bulkApproving}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
                   >
@@ -181,7 +227,7 @@ export function OpportunityDrawer({
                     ) : (
                       <Button
                         size="sm"
-                        onClick={() => onCreateGrowthAction(customer)}
+                        onClick={() => handleCreateSingle(customer)}
                         disabled={creatingActionForCustomer === customer.id}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                       >
