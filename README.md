@@ -44,7 +44,7 @@ flowchart LR
 7. **Razorpay Payment Link**: Calls the Razorpay API using encrypted merchant credentials and authoritative database pricing to generate an authenticated Payment Link.
 8. **Customer Payment**: Customers receive links and pay securely via Razorpay's native checkout.
 9. **Verified Webhook**: Ingests `payment_link.paid` webhook events with HMAC-SHA256 signature verification and idempotency safeguards.
-10. **Realized Revenue & Audit Trail**: Atomically marks the action `EXECUTED`, updates Realized Revenue, and commits an immutable multi-tenant audit trail.
+10. **Realized Revenue & Audit Trail**: Atomically marks the action `EXECUTED`, updates Realized Revenue, and commits a multi-tenant audit trail.
 
 ---
 
@@ -58,7 +58,7 @@ flowchart LR
 - **Razorpay Payment Link Execution**: Authenticated dispatch to Razorpay API with authoritative database pricing, recipient metadata, and embedded reconciliation notes.
 - **Payment Link Notification Delivery**: Native delivery via Razorpay email notification channels with support for safe resends.
 - **Cryptographic Webhook Verification**: Production-grade HMAC-SHA256 signature verification for incoming Razorpay webhooks.
-- **Webhook Idempotency & Concurrency Safety**: Guaranteed exactly-once execution using PostgreSQL transaction advisory locks (`pg_advisory_xact_lock`) and duplicate event detection.
+- **Webhook Idempotency & Concurrency Safety**: Prevents duplicate state transitions and duplicate processing using PostgreSQL transaction advisory locks (`pg_advisory_xact_lock`) and persisted payment events.
 - **Realized Revenue Tracking**: Strict financial accounting separating hypothetical pipeline value from actual captured revenue.
 - **Multi-Actor Audit Trail**: Chronological event ledger recording every lifecycle transition with timestamps and explicit actor badges (`AGENT`, `MERCHANT`, `SYSTEM`, `RAZORPAY`).
 - **AI Buyer Readiness & Public Catalog**: Public, read-only machine-readable catalog surfacing grounded Schema.org `Product` JSON-LD for autonomous AI shopping agents.
@@ -153,7 +153,7 @@ graph TD
             Analytics[Deterministic Analytics Engine]
             AIOrch[AI Provider Orchestrator\nGemini + OpenRouter Fallback]
             StateMachine[GrowthAction State Machine\nPENDING_APPROVAL ➔ APPROVED ➔ EXECUTING ➔ EXECUTED]
-            AuditLog[Immutable Audit Trail]
+            AuditLog[Multi-Tenant Audit Trail]
         end
 
         subgraph Agentic Commerce
@@ -190,16 +190,16 @@ graph TD
 
 | Safety Control | Implementation & Enforcement | Source Reference |
 |---|---|---|
-| **Authoritative Pricing** | Target product prices are strictly resolved from PostgreSQL `Product.price`. Client overrides, LLM suggestions, or URL parameter prices are discarded. | [`lib/actions/validation.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/actions/validation.ts) |
-| **Financial Units** | Razorpay transactions strictly operate in integer paise (`Math.round(price * 100)`). UI and accounting operate in integer rupees. Zero floating-point drift. | [`lib/razorpay/payment-links.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/razorpay/payment-links.ts) |
+| **Authoritative Pricing** | Target product prices are strictly resolved from PostgreSQL `Product.price`. Client overrides, LLM suggestions, or URL parameter prices are discarded. | [`lib/actions/validation.ts`](lib/actions/validation.ts) |
+| **Financial Units** | Razorpay transactions strictly operate in integer paise (`Math.round(price * 100)`). UI and accounting operate in integer rupees. Zero floating-point drift. | [`lib/razorpay/payment-links.ts`](lib/razorpay/payment-links.ts) |
 | **Tenant Isolation** | Every database operation enforces `where: { merchantId }`. Cross-tenant record access is blocked at the ORM query boundary. | All `lib/actions/*.ts` |
-| **Encrypted Credentials** | Merchant Razorpay Key Secrets are stored encrypted using AES-256-GCM (`iv:tag:ciphertext`). Secrets are never logged or returned to frontend clients. | [`lib/crypto/encryption.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/crypto/encryption.ts) |
-| **Secret Sanitization** | `sanitizeSecrets` automatically redacts known credentials, key secrets, and authorization tokens from error messages and diagnostic traces. | [`lib/razorpay/client.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/razorpay/client.ts) |
-| **PostgreSQL Advisory Locks** | Concurrency safety for action creation and approval uses transactional advisory locks (`pg_advisory_xact_lock`), eliminating race conditions. | [`lib/actions/create.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/actions/create.ts) |
-| **Double-Spend Prevention** | Customers who have completed and paid for an action are prevented from receiving duplicate active actions or duplicate charges. | [`lib/actions/duplicate-check.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/actions/duplicate-check.ts) |
-| **Webhook Cryptography** | Incoming webhooks verify the `X-Razorpay-Signature` header using HMAC-SHA256 against `RAZORPAY_WEBHOOK_SECRET`. | [`app/api/webhooks/razorpay/route.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/app/api/webhooks/razorpay/route.ts) |
-| **Webhook Idempotency** | Duplicate webhook deliveries are checked against persisted `PAYMENT_LINK_PAID` audit events, returning HTTP 200 without duplicate state transitions. | [`lib/razorpay/webhooks.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/razorpay/webhooks.ts) |
-| **Bounded Purchase Intent** | The external AI Buyer purchase-intent API creates records in `READY_FOR_CONFIRMATION` status; it never triggers charges or creates payment links. | [`lib/buyer/ai-catalog.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/buyer/ai-catalog.ts) |
+| **Encrypted Credentials** | Merchant Razorpay Key Secrets are stored encrypted using AES-256-GCM (`iv:tag:ciphertext`). Secrets are never logged or returned to frontend clients. | [`lib/crypto/encryption.ts`](lib/crypto/encryption.ts) |
+| **Secret Sanitization** | `sanitizeSecrets` automatically redacts known credentials, key secrets, and authorization tokens from error messages and diagnostic traces. | [`lib/razorpay/client.ts`](lib/razorpay/client.ts) |
+| **PostgreSQL Advisory Locks** | Concurrency safety for action creation and approval uses transactional advisory locks (`pg_advisory_xact_lock`), eliminating race conditions. | [`lib/actions/create.ts`](lib/actions/create.ts) |
+| **Double-Spend Prevention** | Customers who have completed and paid for an action are prevented from receiving duplicate active actions or duplicate charges. | [`lib/actions/duplicate-check.ts`](lib/actions/duplicate-check.ts) |
+| **Webhook Cryptography** | Incoming webhooks verify the `X-Razorpay-Signature` header using HMAC-SHA256 against `RAZORPAY_WEBHOOK_SECRET`. | [`app/api/webhooks/razorpay/route.ts`](app/api/webhooks/razorpay/route.ts) |
+| **Webhook Idempotency** | Duplicate webhook deliveries are checked against persisted `PAYMENT_LINK_PAID` audit events, returning HTTP 200 without duplicate state transitions. | [`lib/razorpay/webhooks.ts`](lib/razorpay/webhooks.ts) |
+| **Bounded Purchase Intent** | The external AI Buyer purchase-intent API creates records in `READY_FOR_CONFIRMATION` status; it never triggers charges or creates payment links. | [`lib/buyer/ai-catalog.ts`](lib/buyer/ai-catalog.ts) |
 
 ---
 
@@ -233,7 +233,7 @@ Follow this sequence for the optimal live demo:
 - *Point out: Realized Revenue remains unchanged while the link is merely active.*
 
 ### 6. Simulate Payment & Webhook Settlement
-- Use the in-app **"Simulate Payment"** trigger (or send a `payment_link.paid` webhook payload).
+- Use the in-app **"Simulate Payment"** trigger to exercise the demo payment/webhook path (or send a `payment_link.paid` webhook payload). This demo-only mechanism exercises the application's webhook processing, validation, idempotency, and state-transition path; it does not represent an actual Razorpay settlement.
 - Observe the live update:
   - Action status advances to **`EXECUTED`**.
   - **Realized Revenue increases by exactly +₹18,000**.
@@ -258,13 +258,11 @@ Follow this sequence for the optimal live demo:
 - **Store Name**: TechNova Store
 - **Default Currency**: INR (₹)
 
-*(Multi-tenant isolation counter-merchant: `merchant@technova.dem` / Acme Electronics)*
-
 ---
 
 ## AI Buyer Readiness & Agentic Commerce
 
-RazorGrowth enables merchants to participate in the emerging agentic commerce economy where autonomous AI shopping agents discover and buy products on behalf of consumers.
+RazorGrowth prepares merchants for agentic commerce by exposing machine-readable product data and a bounded purchase-intent flow that requires explicit confirmation before payment.
 
 ### Public Read-Only Discovery Endpoint
 ```http
@@ -443,7 +441,7 @@ npx tsx --test "test/*.test.ts"
 - **Tenant Isolation**: Guarantees Merchant A cannot view, analyze, or execute actions against Merchant B's data (`phase3.test.ts`, `phase4.test.ts`, `phase5.test.ts`).
 - **GrowthAction Lifecycle**: Strict state machine assertions (`PENDING_APPROVAL` $\to$ `APPROVED` $\to$ `EXECUTING` $\to$ `EXECUTED`) (`growth-action-concurrency.test.ts`).
 - **Concurrency & Races**: PostgreSQL advisory locks verified under simultaneous parallel creation and approval requests (`growth-action-creation-race.test.ts`).
-- **Webhook Integrity & Idempotency**: Cryptographic HMAC verification, price matching, and exactly-once duplicate delivery protection (`webhook-payment-integrity.test.ts`).
+- **Webhook Integrity & Idempotency**: Cryptographic HMAC verification, price matching, and idempotent duplicate-delivery protection (`webhook-payment-integrity.test.ts`).
 - **Secret Redaction**: Verification that API keys and key secrets never leak in error messages or logs (`razorpay-client-validation.test.ts`).
 - **AI Dual-Provider Fallback**: Automatic failover from Gemini to OpenRouter upon rate limits or upstream errors (`ai-provider-orchestrator.test.ts`).
 - **AI Buyer Catalog Safety**: Read-only public catalog verified to exclude PII, orders, and credentials (`phase5-1.test.ts`).
@@ -471,10 +469,10 @@ RazorGrowth specifically targets the **AI Growth & Agentic Commerce** track of t
 
 | Component | Code Location | Key Things to Look For |
 |---|---|---|
-| **Deterministic Analytics** | [`lib/analytics/cross-sell.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/analytics/cross-sell.ts) | Pure mathematical calculation of attach rates, support, and co-purchases from order items. |
-| **Approval Boundary** | [`lib/actions/state-machine.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/actions/state-machine.ts) | Centralized state transition assertions preventing unauthorized execution. |
-| **Concurrency & Locks** | [`lib/actions/create.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/actions/create.ts) | Transaction-level `pg_advisory_xact_lock` guaranteeing duplicate-free action creation. |
-| **Payment Link Execution** | [`lib/razorpay/payment-links.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/razorpay/payment-links.ts) | Authoritative database pricing retrieval and Razorpay API dispatch. |
-| **Webhook Processing** | [`lib/razorpay/webhooks.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/razorpay/webhooks.ts) | Cryptographic signature verification, amount matching, and duplicate idempotency. |
-| **AI Orchestration** | [`lib/agent/orchestrator.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/agent/orchestrator.ts) | Automatic primary/fallback provider switching between Gemini and OpenRouter. |
-| **AI Buyer Catalog** | [`lib/buyer/ai-catalog.ts`](file:///D:/FullStack%20Webdev/Assignments/razorgrowth/lib/buyer/ai-catalog.ts) | Schema.org JSON-LD generation with strict allowlist query boundaries. |
+| **Deterministic Analytics** | [`lib/analytics/cross-sell.ts`](lib/analytics/cross-sell.ts) | Pure mathematical calculation of attach rates, support, and co-purchases from order items. |
+| **Approval Boundary** | [`lib/actions/state-machine.ts`](lib/actions/state-machine.ts) | Centralized state transition assertions preventing unauthorized execution. |
+| **Concurrency & Locks** | [`lib/actions/create.ts`](lib/actions/create.ts) | Transaction-level `pg_advisory_xact_lock` guaranteeing duplicate-free action creation. |
+| **Payment Link Execution** | [`lib/razorpay/payment-links.ts`](lib/razorpay/payment-links.ts) | Authoritative database pricing retrieval and Razorpay API dispatch. |
+| **Webhook Processing** | [`lib/razorpay/webhooks.ts`](lib/razorpay/webhooks.ts) | Cryptographic signature verification, amount matching, and duplicate idempotency. |
+| **AI Orchestration** | [`lib/agent/orchestrator.ts`](lib/agent/orchestrator.ts) | Automatic primary/fallback provider switching between Gemini and OpenRouter. |
+| **AI Buyer Catalog** | [`lib/buyer/ai-catalog.ts`](lib/buyer/ai-catalog.ts) | Schema.org JSON-LD generation with strict allowlist query boundaries. |
