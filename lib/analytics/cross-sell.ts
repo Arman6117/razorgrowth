@@ -115,9 +115,11 @@ export async function analyzeCrossSell(
       continue;
     }
 
+    const targetCustomerSet = productCustomers.get(targetProductId);
+
     // Eligible customers = source product buyers who have NOT purchased the target product
     const eligibleCustomerIds = Array.from(sourceCustomerSet!).filter(
-      (customerId) => !customers.has(customerId)
+      (customerId) => !targetCustomerSet?.has(customerId)
     );
     const eligibleCustomerCount = eligibleCustomerIds.length;
 

@@ -117,13 +117,13 @@ export const RazorpayErrorPayloadSchema = z
   .object({
     error: z
       .object({
-        code: z.string().optional(),
-        description: z.string().optional(),
-        field: z.string().optional(),
-        reason: z.string().optional(),
-        source: z.string().optional(),
-        step: z.string().optional(),
-        metadata: z.record(z.string(), z.unknown()).optional(),
+        code: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
+        field: z.string().nullable().optional(),
+        reason: z.string().nullable().optional(),
+        source: z.string().nullable().optional(),
+        step: z.string().nullable().optional(),
+        metadata: z.unknown().optional(),
       })
       .optional(),
   })

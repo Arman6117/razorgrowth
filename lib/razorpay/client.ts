@@ -325,7 +325,7 @@ export async function razorpayRequestWithCredentials<
       errObj?.description ||
       errObj?.reason ||
       `Razorpay API error (HTTP ${response.status})`;
-    const errField = errObj?.field;
+    const errField = errObj?.field || undefined;
 
     const safeDescription = sanitizeSecrets(errDescription, [keySecret, keyId]);
 
