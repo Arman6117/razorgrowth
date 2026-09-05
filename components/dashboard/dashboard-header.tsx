@@ -1,5 +1,5 @@
 import React from "react";
-import { Zap, Sparkles, Bot, RefreshCw, LogOut } from "lucide-react";
+import { Zap, Bot, RefreshCw, LogOut, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface DashboardHeaderProps {
@@ -18,71 +18,78 @@ export function DashboardHeader({
   onLogout,
 }: DashboardHeaderProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-neutral-200 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+        {/* Brand & Product Positioning */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20">
-            <Zap className="w-5 h-5" />
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-xs">
+            <Zap className="w-4 h-4 fill-current" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-neutral-900 to-neutral-700 dark:from-white dark:to-neutral-300 bg-clip-text text-transparent">
+              <span className="font-bold text-sm tracking-tight text-foreground">
                 RazorGrowth
               </span>
-              <span className="text-xs px-2 py-0.5 font-medium rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                Razorpay Buildathon 2026
+              <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 font-medium rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 select-none">
+                Revenue Operations
               </span>
             </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              AI Growth & Agentic Commerce Track
+            <p className="text-[11px] text-muted-foreground hidden sm:block">
+              Commerce Intelligence & Opportunity Engine
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-xs font-mono text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Razorpay API: Test Mode Active
+        {/* Status Indicators & Action Hierarchy */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-neutral-100/80 dark:bg-neutral-800/80 text-[11px] font-mono text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 select-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Razorpay Test Mode
           </div>
 
-          <Button
-            size="sm"
-            onClick={onOpenChatDrawer}
-            className="gap-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-md shadow-indigo-500/20 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>AI Growth Agent</span>
-          </Button>
-
+          {/* Secondary: Developer Tools */}
           <Button
             variant="outline"
             size="sm"
             onClick={onOpenAgentPanel}
-            className="gap-1.5 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50 cursor-pointer"
+            className="text-xs"
           >
-            <Bot className="w-4 h-4 text-purple-600" />
-            <span className="hidden sm:inline">Developer Tools</span>
+            <Bot className="w-3.5 h-3.5 text-neutral-500" />
+            <span className="hidden sm:inline">Tools</span>
           </Button>
 
+          {/* Secondary: Refresh */}
           <Button
             variant="outline"
             size="sm"
             onClick={onRefresh}
             disabled={refreshing}
-            className="gap-1.5 cursor-pointer"
+            className="text-xs"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
+            <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin text-neutral-400" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
 
+          {/* Primary Action: Growth Copilot Drawer */}
           <Button
-            variant="outline"
+            variant="ai"
+            size="sm"
+            onClick={onOpenChatDrawer}
+            className="text-xs"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Growth Agent</span>
+          </Button>
+
+          {/* Tertiary / Destructive: Logout */}
+          <Button
+            variant="ghost"
             size="sm"
             onClick={onLogout}
-            className="gap-1.5 border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+            className="text-xs text-neutral-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Log out</span>
+            <span className="hidden lg:inline">Sign out</span>
           </Button>
         </div>
       </div>

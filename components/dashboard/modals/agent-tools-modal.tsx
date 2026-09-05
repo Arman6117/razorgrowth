@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bot, X } from "lucide-react";
+import { Bot, X, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OpportunityItem } from "@/lib/dashboard/types";
 
@@ -49,39 +49,43 @@ export function AgentToolsModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end">
-      <div className="w-full max-w-xl bg-white dark:bg-neutral-900 h-full shadow-2xl flex flex-col border-l border-neutral-200 dark:border-neutral-800">
-        <div className="p-6 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-purple-600" />
-            <h3 className="text-lg font-bold text-neutral-900 dark:text-white">
-              Deterministic AI Agent Tools
+      <div className="w-full max-w-xl bg-card h-full shadow-2xl flex flex-col border-l border-border">
+        {/* Header */}
+        <div className="p-5 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center shadow-xs">
+              <Bot className="w-4 h-4" />
+            </div>
+            <h3 className="text-sm font-bold text-foreground">
+              Deterministic Tool Interfaces
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
+            className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm">
-          <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-xs text-purple-900 dark:text-purple-300">
-            <strong>Phase 1 AI Architecture:</strong> Deterministic backend tools that expose the business logic to LLM agents without bypassing policy checks, authorization, or authoritative database pricing.
+        {/* Content */}
+        <div className="p-5 overflow-y-auto space-y-5 flex-1 text-xs">
+          <div className="p-3 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/50 text-indigo-950 dark:text-indigo-200 leading-relaxed">
+            <strong>Deterministic Infrastructure:</strong> Backend execution tools callable by autonomous LLM agents with strictly enforced policy checks, tenant isolation, and authoritative pricing.
           </div>
 
-          <div className="space-y-3">
-            <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs uppercase tracking-wider">
-              Test Deterministic Tools
+          <div className="space-y-2.5">
+            <h4 className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wider">
+              Execute Tool Endpoints
             </h4>
 
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-1 gap-2 font-mono">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={runningTool}
                 onClick={() => handleRunAgentTool("analyzeCrossSell", {})}
-                className="justify-start text-xs font-mono"
+                className="justify-start text-xs font-mono h-9"
               >
                 1. tool: analyzeCrossSell()
               </Button>
@@ -98,7 +102,7 @@ export function AgentToolsModal({
                       sourceProductId: opportunities[0].sourceProductId,
                     })
                   }
-                  className="justify-start text-xs font-mono"
+                  className="justify-start text-xs font-mono h-9"
                 >
                   2. tool: isCustomerEligible(customerId, targetProductId)
                 </Button>
@@ -117,7 +121,7 @@ export function AgentToolsModal({
                       sourceProductId: opportunities[0].sourceProductId,
                     })
                   }
-                  className="justify-start text-xs font-mono"
+                  className="justify-start text-xs font-mono h-9"
                 >
                   3. tool: createGrowthAction(opportunityId, customerId)
                 </Button>
@@ -126,15 +130,19 @@ export function AgentToolsModal({
           </div>
 
           {/* Output Display */}
-          <div className="space-y-2">
-            <h4 className="font-semibold text-xs text-neutral-500 uppercase tracking-wider">
-              Agent Tool Response (Structured JSON)
+          <div className="space-y-1.5">
+            <h4 className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">
+              Tool Output Response (Authoritative JSON)
             </h4>
-            <pre className="p-4 rounded-xl bg-neutral-900 text-neutral-100 text-xs font-mono overflow-x-auto max-h-72 border border-neutral-800">
-              {runningTool
-                ? "Executing deterministic backend tool..."
-                : agentOutput ||
-                  "// Click a tool above to execute and view authoritative JSON response"}
+            <pre className="p-3.5 rounded-lg bg-neutral-950 text-neutral-200 text-[11px] font-mono overflow-x-auto max-h-72 border border-border">
+              {runningTool ? (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Executing backend tool...
+                </span>
+              ) : (
+                agentOutput || "// Click a tool interface above to inspect response"
+              )}
             </pre>
           </div>
         </div>

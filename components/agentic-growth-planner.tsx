@@ -8,17 +8,14 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  Clock,
-  DollarSign,
-  Users,
-  Package,
-  Layers,
   RefreshCw,
-  Info,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { FinancialValue } from "@/components/ui/financial-value";
+import { AIBadge } from "@/components/ui/ai-badge";
 
 export interface GrowthPlanData {
   opportunityId: string;
@@ -168,39 +165,39 @@ export function AgenticGrowthPlanner({
 
   if (!opportunityId) {
     return (
-      <div className="p-6 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-center">
-        <Bot className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-          AI Growth Planner
+      <Card className="p-6 text-center bg-card border-border">
+        <Bot className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-60" />
+        <h3 className="text-sm font-semibold text-foreground">
+          Autonomous Campaign Planner
         </h3>
-        <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-          Select an opportunity from the list above to generate a grounded, actionable growth campaign.
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+          Select any opportunity above to formulate a targeted conversion plan with pre-validated customer eligibility.
         </p>
-      </div>
+      </Card>
     );
   }
 
   if (loading) {
     return (
-      <div className="p-8 rounded-2xl bg-white dark:bg-neutral-900 border border-indigo-200 dark:border-indigo-800/60 shadow-xs flex flex-col items-center justify-center text-center space-y-3">
-        <RefreshCw className="w-7 h-7 text-indigo-600 dark:text-indigo-400 animate-spin" />
+      <Card className="p-8 border-border shadow-xs flex flex-col items-center justify-center text-center space-y-3 bg-card">
+        <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" />
         <div>
-          <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
-            Agent Evaluating Opportunity & Eligibility...
+          <h4 className="text-sm font-bold text-foreground">
+            Evaluating Campaign Eligibility...
           </h4>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            Querying backend order patterns, co-purchase rates, and resolving eligible customer accounts.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Querying backend order patterns, historical attach rates, and resolving unfulfilled customer accounts.
           </p>
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-900 dark:text-rose-300">
+      <div className="p-4 rounded-lg bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-900 dark:text-rose-300">
         <div className="flex items-center gap-2 font-bold mb-1">
-          <AlertTriangle className="w-4 h-4 text-rose-600" />
+          <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
           Planning Failed
         </div>
         <p>{error}</p>
@@ -213,154 +210,160 @@ export function AgenticGrowthPlanner({
   const isPrepared = preparedSuccess !== null && preparedSuccess > 0;
 
   return (
-    <div className="p-6 rounded-2xl bg-white dark:bg-neutral-900 border border-indigo-300 dark:border-indigo-700/70 shadow-md ring-1 ring-indigo-500/10 space-y-5">
+    <Card variant="featured" className="p-5 space-y-4 border-indigo-200 dark:border-indigo-900/60 bg-card">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-100 dark:border-neutral-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/70">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+          <div className="w-7 h-7 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center shadow-xs">
             <Bot className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                AI Growth Planner
+              <h3 className="text-sm font-bold text-foreground">
+                Campaign Execution Plan
               </h3>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
+              <AIBadge variant="subtle" icon="none">
                 {plan.strategy}
-              </span>
+              </AIBadge>
             </div>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-muted-foreground">
               Autonomous campaign planning backed by deterministic sales evidence.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 select-none">
             {Math.round(plan.confidence * 100)}% Confidence
           </span>
         </div>
       </div>
 
-      {/* Opportunity Title & Why / Explanation */}
+      {/* Opportunity Title & Reason */}
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-          Opportunity
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Targeted Opportunity
         </div>
-        <h4 className="text-lg font-bold text-neutral-900 dark:text-white">
+        <h4 className="text-base font-bold text-foreground">
           &quot;{plan.title}&quot;
         </h4>
-        <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-black/30 border border-neutral-200/80 dark:border-neutral-800 text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
-          <div className="font-semibold text-neutral-900 dark:text-white mb-1">
+        <div className="p-3 rounded-lg bg-neutral-50/80 dark:bg-neutral-900/60 border border-border text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
+          <div className="font-semibold text-foreground mb-1">
             Why this action:
           </div>
           {plan.reason}
         </div>
 
         {plan.strategicInsight && (
-          <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-950 dark:text-indigo-200 flex items-start gap-2">
+          <div className="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-950 dark:text-indigo-200 flex items-start gap-2">
             <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
             <div>
-              <span className="font-semibold">AI Strategic Guidance:</span> {plan.strategicInsight}
+              <span className="font-semibold">AI Guidance:</span> {plan.strategicInsight}
             </div>
           </div>
         )}
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 rounded-xl bg-neutral-50 dark:bg-black/30 border border-neutral-200/60 dark:border-neutral-800 text-xs">
-          <div className="text-neutral-400 text-[10px] uppercase font-semibold">Target Audience</div>
-          <div className="text-lg font-extrabold text-neutral-900 dark:text-white mt-0.5">
-            {plan.eligibleCustomerCount} Customers
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border text-xs">
+          <div className="text-muted-foreground text-[10px] uppercase font-semibold">Target Audience</div>
+          <div className="text-base font-bold text-foreground mt-0.5 font-mono tabular-nums">
+            {plan.eligibleCustomerCount} Buyers
           </div>
-          <span className="text-[11px] text-neutral-500">Verified eligible</span>
+          <span className="text-[11px] text-muted-foreground">Verified eligible</span>
         </div>
 
-        <div className="p-3 rounded-xl bg-neutral-50 dark:bg-black/30 border border-neutral-200/60 dark:border-neutral-800 text-xs">
-          <div className="text-neutral-400 text-[10px] uppercase font-semibold">Recommended Offer</div>
-          <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 truncate" title={plan.targetProductName}>
+        <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border text-xs">
+          <div className="text-muted-foreground text-[10px] uppercase font-semibold">Recommended Offer</div>
+          <div className="text-xs font-bold text-foreground mt-0.5 truncate" title={plan.targetProductName}>
             {plan.targetProductName}
           </div>
-          <span className="text-[11px] text-neutral-500 font-mono">₹{plan.targetProductPrice.toLocaleString("en-IN")}</span>
+          <span className="text-[11px] text-muted-foreground font-mono">
+            <FinancialValue value={plan.targetProductPrice} size="xs" variant="muted" />
+          </span>
         </div>
 
-        <div className="p-3 rounded-xl bg-neutral-50 dark:bg-black/30 border border-neutral-200/60 dark:border-neutral-800 text-xs">
-          <div className="text-neutral-400 text-[10px] uppercase font-semibold">Estimated Value</div>
-          <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
-            ₹{Math.round(plan.estimatedValue).toLocaleString("en-IN")}
+        <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border text-xs">
+          <div className="text-muted-foreground text-[10px] uppercase font-semibold">Estimated Value</div>
+          <div className="mt-0.5">
+            <FinancialValue value={Math.round(plan.estimatedValue)} size="lg" variant="revenue" />
           </div>
-          <span className="text-[11px] text-neutral-500">Authoritative price</span>
+          <span className="text-[11px] text-muted-foreground">Authoritative price</span>
         </div>
 
-        <div className="p-3 rounded-xl bg-neutral-50 dark:bg-black/30 border border-neutral-200/60 dark:border-neutral-800 text-xs">
-          <div className="text-neutral-400 text-[10px] uppercase font-semibold">Action Mechanism</div>
-          <div className="text-sm font-bold text-neutral-900 dark:text-white mt-0.5">
+        <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border text-xs">
+          <div className="text-muted-foreground text-[10px] uppercase font-semibold">Delivery Medium</div>
+          <div className="text-xs font-bold text-foreground mt-0.5">
             Payment Links
           </div>
-          <span className="text-[11px] text-neutral-500">Native Razorpay email</span>
+          <span className="text-[11px] text-muted-foreground">Razorpay Test Mode</span>
         </div>
       </div>
 
       {/* Safety Notice Banner */}
-      <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+      <div className="p-3 rounded-lg bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
         <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
         <div>
-          <span className="font-bold">Merchant approval mandatory.</span> No payment links will be created or delivered, and no customer will be charged until you explicitly approve the prepared actions.
+          <strong>Merchant approval mandatory:</strong> Actions are prepared in <code className="font-mono text-[11px] px-1 rounded bg-amber-100 dark:bg-amber-900/60 font-semibold">PENDING_APPROVAL</code> status. No customer is contacted and no link is issued until you review and approve.
         </div>
       </div>
 
-      {/* Action Preparation & Review Workflow */}
+      {/* Action Controls */}
       <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setShowEvidenceDetails((prev) => !prev)}
-          className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white gap-1"
+          className="text-xs text-muted-foreground hover:text-foreground"
         >
           {showEvidenceDetails ? (
             <>
-              Hide Technical Evidence <ChevronUp className="w-3.5 h-3.5" />
+              Hide Technical Details <ChevronUp className="w-3 h-3 ml-1" />
             </>
           ) : (
             <>
-              Inspect Backend Evidence <ChevronDown className="w-3.5 h-3.5" />
+              Inspect Grounding Evidence <ChevronDown className="w-3 h-3 ml-1" />
             </>
           )}
         </Button>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           {isPrepared ? (
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 select-none">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>
                   {preparedSuccess} {preparedSuccess === 1 ? "action" : "actions"} awaiting approval
                 </span>
               </div>
 
               <Button
+                variant="growth"
+                size="sm"
                 onClick={() => onReviewActions(plan.opportunityId)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer"
+                className="text-xs"
               >
                 Review Actions
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-3 h-3 ml-1.5" />
               </Button>
             </div>
           ) : (
             <Button
+              variant="default"
+              size="sm"
               onClick={handlePrepareActions}
               disabled={preparing || plan.eligibleCustomerCount === 0}
-              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs gap-1.5 cursor-pointer"
+              className="w-full sm:w-auto text-xs"
             >
               {preparing ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Preparing Growth Actions...
+                  <RefreshCw className="w-3 h-3 animate-spin mr-1.5" />
+                  Preparing Actions...
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                   Prepare Growth Actions ({plan.eligibleCustomerCount})
                 </>
               )}
@@ -369,13 +372,13 @@ export function AgenticGrowthPlanner({
         </div>
       </div>
 
-      {/* Expanded Technical Evidence */}
+      {/* Expanded Technical Details */}
       {showEvidenceDetails && (
-        <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 space-y-2 text-xs">
-          <div className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-            Deterministic Grounding Facts
+        <div className="pt-3 border-t border-border/70 space-y-1.5 text-xs">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Deterministic Grounding Payload
           </div>
-          <pre className="p-3 rounded-xl bg-neutral-900 text-neutral-200 text-[11px] font-mono overflow-x-auto">
+          <pre className="p-3 rounded-lg bg-neutral-950 text-neutral-200 text-[11px] font-mono overflow-x-auto border border-border">
             {JSON.stringify(
               {
                 opportunityId: plan.opportunityId,
@@ -392,6 +395,6 @@ export function AgenticGrowthPlanner({
           </pre>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

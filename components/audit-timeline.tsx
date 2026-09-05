@@ -17,6 +17,7 @@ import {
   Send,
 } from "lucide-react";
 import { AuditEventItem } from "@/lib/dashboard/types";
+import { FinancialValue } from "@/components/ui/financial-value";
 export type { AuditEventItem };
 
 interface AuditTimelineProps {
@@ -27,8 +28,8 @@ interface AuditTimelineProps {
 export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
   if (!events || events.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-6 text-sm text-neutral-500">
-        <Clock className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mb-2 animate-pulse" />
+      <div className="flex flex-col items-center justify-center p-6 text-xs text-muted-foreground">
+        <Clock className="w-6 h-6 text-neutral-300 dark:text-neutral-700 mb-2" />
         No audit events recorded yet for this action.
       </div>
     );
@@ -42,27 +43,27 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
     switch (actor?.toUpperCase()) {
       case "MERCHANT":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-            <User className="w-3 h-3" /> Merchant
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
+            <User className="w-2.5 h-2.5" /> Merchant
           </span>
         );
       case "RAZORPAY":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-            <CreditCard className="w-3 h-3" /> Razorpay
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+            <CreditCard className="w-2.5 h-2.5" /> Razorpay
           </span>
         );
       case "AGENT":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-            <Bot className="w-3 h-3" /> AI Agent
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+            <Bot className="w-2.5 h-2.5" /> AI Agent
           </span>
         );
       case "SYSTEM":
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300">
-            <Zap className="w-3 h-3" /> System
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
+            <Zap className="w-2.5 h-2.5" /> System
           </span>
         );
     }
@@ -71,25 +72,25 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
       case "GROWTH_ACTION_CREATED":
-        return <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />;
+        return <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
       case "GROWTH_ACTION_APPROVED":
-        return <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+        return <ShieldCheck className="w-3.5 h-3.5 text-neutral-900 dark:text-neutral-100" />;
       case "PAYMENT_LINK_CREATED":
-        return <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />;
+        return <CreditCard className="w-3.5 h-3.5 text-neutral-900 dark:text-neutral-100" />;
       case "PAYMENT_LINK_DELIVERED":
-        return <Mail className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
+        return <Mail className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />;
       case "PAYMENT_LINK_RESENT":
-        return <Send className="w-4 h-4 text-purple-600 dark:text-purple-400" />;
+        return <Send className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
       case "PAYMENT_LINK_PAID":
-        return <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
+        return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
       case "ACTION_RETRY":
-        return <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
+        return <RefreshCw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
       case "GROWTH_ACTION_FAILED":
-        return <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />;
+        return <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
       case "GROWTH_ACTION_REJECTED":
-        return <XCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
+        return <XCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
       default:
-        return <Clock className="w-4 h-4 text-neutral-500" />;
+        return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
     }
   };
 
@@ -120,7 +121,7 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <div className="relative pl-6 border-l-2 border-neutral-200 dark:border-neutral-800 space-y-6">
+      <div className="relative pl-5 border-l border-border space-y-4">
         {sortedEvents.map((evt, idx) => {
           const formattedDate = new Date(evt.createdAt).toLocaleString("en-IN", {
             day: "numeric",
@@ -136,65 +137,65 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
           return (
             <div key={evt.id || idx} className="relative group">
               {/* Timeline dot */}
-              <div className="absolute -left-[31px] top-0.5 flex items-center justify-center w-6 h-6 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 shadow-xs">
+              <div className="absolute -left-[27px] top-1 flex items-center justify-center w-5 h-5 rounded-md bg-card border border-border shadow-2xs">
                 {getEventIcon(evt.eventType)}
               </div>
 
               {/* Event Content */}
-              <div className="rounded-lg bg-neutral-50 dark:bg-neutral-900/60 p-3.5 border border-neutral-200/80 dark:border-neutral-800 text-sm">
+              <div className="rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 p-3 border border-border text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                  <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                  <span className="font-semibold text-foreground">
                     {getEventTitle(evt.eventType)}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {getActorBadge(evt.actor)}
-                    <span className="text-xs text-neutral-500">{formattedDate}</span>
+                    <span className="text-[11px] text-muted-foreground font-mono">{formattedDate}</span>
                   </div>
                 </div>
 
                 {/* Metadata Details */}
                 {Object.keys(meta).length > 0 && (
-                  <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1 bg-white/70 dark:bg-black/30 p-2.5 rounded-md border border-neutral-100 dark:border-neutral-800/60 font-mono">
+                  <div className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400 space-y-1 bg-card p-2.5 rounded-md border border-border font-mono">
                     {Boolean(meta.deliveryMedium) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Delivery Medium:</span>
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                        <span className="text-muted-foreground">Delivery Medium:</span>
+                        <span className="font-medium text-foreground">
                           {String(meta.deliveryMedium)}
                         </span>
                       </div>
                     )}
                     {Boolean(meta.customerEmail) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Recipient Email:</span>
-                        <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                        <span className="text-muted-foreground">Recipient Email:</span>
+                        <span className="font-medium text-foreground">
                           {String(meta.customerEmail)}
                         </span>
                       </div>
                     )}
                     {Boolean(meta.resendCount) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Resend Attempt:</span>
-                        <span className="font-semibold text-purple-600 dark:text-purple-400">
+                        <span className="text-muted-foreground">Resend Attempt:</span>
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
                           #{String(meta.resendCount)}
                         </span>
                       </div>
                     )}
                     {Boolean(meta.paymentLinkId) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Payment Link ID:</span>
-                        <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                        <span className="text-muted-foreground">Payment Link ID:</span>
+                        <span className="font-medium text-foreground">
                           {String(meta.paymentLinkId)}
                         </span>
                       </div>
                     )}
                     {Boolean(meta.shortUrl) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">URL:</span>
+                        <span className="text-muted-foreground">URL:</span>
                         <a
                           href={String(meta.shortUrl)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                          className="inline-flex items-center gap-1 text-foreground underline hover:opacity-80"
                         >
                           {String(meta.shortUrl)} <ExternalLink className="w-2.5 h-2.5" />
                         </a>
@@ -202,27 +203,25 @@ export function AuditTimeline({ events, className = "" }: AuditTimelineProps) {
                     )}
                     {Boolean(meta.amountInRupees) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Amount:</span>
-                        <span className="font-semibold text-emerald-600">
-                          ₹{Number(meta.amountInRupees).toLocaleString("en-IN")}
-                        </span>
+                        <span className="text-muted-foreground">Amount:</span>
+                        <FinancialValue value={Number(meta.amountInRupees)} size="xs" variant="revenue" />
                       </div>
                     )}
                     {Boolean(meta.previousStatus) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-500">Previous Status:</span>
-                        <span className="font-semibold text-amber-600">
+                        <span className="text-muted-foreground">Previous Status:</span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">
                           {String(meta.previousStatus)}
                         </span>
                       </div>
                     )}
                     {Boolean(meta.error) && (
-                      <div className="text-rose-600 font-medium">
+                      <div className="text-rose-600 dark:text-rose-400 font-medium">
                         Error: {String(meta.error)}
                       </div>
                     )}
                     {Boolean(meta.reason) && (
-                      <div className="text-amber-600">
+                      <div className="text-amber-600 dark:text-amber-400">
                         Reason: {String(meta.reason)}
                       </div>
                     )}

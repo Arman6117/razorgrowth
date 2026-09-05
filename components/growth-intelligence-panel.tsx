@@ -3,22 +3,18 @@
 import React, { useState } from "react";
 import {
   Sparkles,
-  TrendingUp,
   ArrowRight,
   ShieldCheck,
-  Zap,
-  CheckCircle2,
   RefreshCw,
-  Users,
-  DollarSign,
-  Info,
   ChevronDown,
   ChevronUp,
-  Layers,
   Award,
   Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { FinancialValue } from "@/components/ui/financial-value";
+import { AIBadge } from "@/components/ui/ai-badge";
 
 export interface GrowthEvidence {
   sourceProductName?: string;
@@ -115,25 +111,25 @@ export function GrowthIntelligencePanel({
     switch (type) {
       case "CROSS_SELL":
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 select-none">
             Cross-Sell
           </span>
         );
       case "UPSELL":
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 select-none">
             Upsell
           </span>
         );
       case "REACTIVATION":
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 select-none">
             Reactivation
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 select-none">
             {type}
           </span>
         );
@@ -141,112 +137,112 @@ export function GrowthIntelligencePanel({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-900/10 via-purple-900/10 to-blue-900/10 border border-indigo-200 dark:border-indigo-800/60 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <Sparkles className="w-4 h-4" />
+    <div className="space-y-4">
+      {/* Section Header */}
+      <Card className="p-5 bg-card border-border">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-foreground">
+                Revenue Intelligence Engine
+              </h2>
+              <AIBadge variant="subtle">
+                {aiEnhanced ? "Deterministic + LLM" : "Deterministic Graph"}
+              </AIBadge>
             </div>
-            <h2 className="text-xl font-bold text-neutral-900 dark:text-white">
-              AI Growth Intelligence
-            </h2>
-            {aiEnhanced && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60">
-                LLM Grounded
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400">
-            Deterministic transaction analysis coupled with LLM reasoning. Discovers evidence-backed cross-sells, upsells, and reactivations from actual customer orders.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={onRunAnalysis}
-            disabled={analyzing}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs cursor-pointer gap-1.5"
-          >
-            {analyzing ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                Analyzing Store Data...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-3.5 h-3.5" />
-                Analyze Growth
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Snapshot Summary Bar if available */}
-      {snapshot && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs">
-            <span className="text-neutral-500 font-medium">Historical Paid Orders</span>
-            <div className="text-lg font-bold text-neutral-900 dark:text-white mt-0.5">
-              {snapshot.orders.paid} Orders
-            </div>
-            <span className="text-[11px] text-neutral-400">
-              Avg Order: ₹{snapshot.orders.averageOrderValue}
-            </span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs">
-            <span className="text-neutral-500 font-medium">Customer Repeat Rate</span>
-            <div className="text-lg font-bold text-neutral-900 dark:text-white mt-0.5">
-              {snapshot.customers.withPurchases > 0
-                ? `${((snapshot.customers.repeatBuyers / snapshot.customers.withPurchases) * 100).toFixed(1)}%`
-                : "0%"}
-            </div>
-            <span className="text-[11px] text-emerald-600 font-medium">
-              {snapshot.customers.repeatBuyers} Repeat Buyers
-            </span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs">
-            <span className="text-neutral-500 font-medium">Dormant Reach (&gt;30d)</span>
-            <div className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-              {snapshot.customers.dormantCount} Customers
-            </div>
-            <span className="text-[11px] text-neutral-400">Reactivation Candidates</span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs">
-            <span className="text-neutral-500 font-medium">Catalog Depth</span>
-            <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
-              {snapshot.products.length} Active Products
-            </div>
-            <span className="text-[11px] text-neutral-400">Indexed for Co-purchase</span>
-          </div>
-        </div>
-      )}
-
-      {/* Ranked Opportunities List */}
-      <div className="space-y-4">
-        {opportunities.length === 0 ? (
-          <div className="p-8 text-center bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl">
-            <Sparkles className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-              No Growth Opportunities Generated Yet
-            </h3>
-            <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto">
-              Click &quot;Analyze Growth&quot; to run the deterministic AI growth engine across your historical orders and customer catalog.
+            <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
+              Discovers evidence-backed cross-sells, upsells, and customer reactivations computed directly from historical checkout behavior.
             </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
             <Button
+              variant="default"
+              size="sm"
               onClick={onRunAnalysis}
               disabled={analyzing}
+              className="text-xs"
+            >
+              {analyzing ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  Analyzing Orders...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Run Growth Analysis
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Snapshot Summary Metrics */}
+        {snapshot && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4 pt-4 border-t border-border/70">
+            <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Historical Paid Orders</span>
+              <div className="text-base font-bold text-foreground mt-0.5 font-mono tabular-nums">
+                {snapshot.orders.paid} Orders
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                Avg Order: <FinancialValue value={snapshot.orders.averageOrderValue} size="xs" variant="muted" />
+              </span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Repeat Buyer Rate</span>
+              <div className="text-base font-bold text-foreground mt-0.5 font-mono tabular-nums">
+                {snapshot.customers.withPurchases > 0
+                  ? `${((snapshot.customers.repeatBuyers / snapshot.customers.withPurchases) * 100).toFixed(1)}%`
+                  : "0%"}
+              </div>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                {snapshot.customers.repeatBuyers} repeat customers
+              </span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Dormant Audience (&gt;30d)</span>
+              <div className="text-base font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono tabular-nums">
+                {snapshot.customers.dormantCount} Buyers
+              </div>
+              <span className="text-[11px] text-muted-foreground">Reactivation target</span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Indexed Catalog</span>
+              <div className="text-base font-bold text-foreground mt-0.5 font-mono tabular-nums">
+                {snapshot.products.length} Products
+              </div>
+              <span className="text-[11px] text-muted-foreground">Active for co-purchase</span>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Ranked Opportunities List */}
+      <div className="space-y-3">
+        {opportunities.length === 0 ? (
+          <Card className="p-8 text-center bg-card border-border">
+            <Sparkles className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-60" />
+            <h3 className="text-sm font-semibold text-foreground">
+              No Growth Opportunities Generated Yet
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+              Run the deterministic growth analysis across your transaction history to generate ranked, evidence-backed campaigns.
+            </p>
+            <Button
+              variant="default"
               size="sm"
-              className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs"
+              onClick={onRunAnalysis}
+              disabled={analyzing}
+              className="mt-4 text-xs"
             >
               Analyze Store Data Now
             </Button>
-          </div>
+          </Card>
         ) : (
           opportunities.map((opp, idx) => {
             const oppKey = opp.id || `${opp.type}-${opp.targetProductId}-${idx}`;
@@ -254,123 +250,128 @@ export function GrowthIntelligencePanel({
             const isTop = idx === 0;
 
             return (
-              <div
+              <Card
                 key={oppKey}
-                className={`p-5 rounded-2xl border transition-all ${
-                  isTop
-                    ? "bg-white dark:bg-neutral-900 border-indigo-300 dark:border-indigo-700/80 shadow-md ring-1 ring-indigo-500/20"
-                    : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 shadow-xs hover:border-neutral-300 dark:hover:border-neutral-700"
-                }`}
+                variant={isTop ? "featured" : "default"}
+                className={`p-4 transition-colors ${isTop ? "border-indigo-300 dark:border-indigo-800" : ""}`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  {/* Left Metadata & Story */}
                   <div className="space-y-2 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {isTop && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60">
-                          <Award className="w-3 h-3 text-amber-600" /> #1 Top Opportunity
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 select-none">
+                          <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Top Opportunity
                         </span>
                       )}
                       {getTypeBadge(opp.type)}
-                      <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300">
+                      <span className="text-[11px] font-mono font-medium text-muted-foreground">
                         Score: {(opp.score * 100).toFixed(0)}/100
                       </span>
-                      <span className="text-xs text-neutral-400">•</span>
-                      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="text-muted-foreground text-xs">•</span>
+                      <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400">
                         {((opp.confidence || 0) * 100).toFixed(0)}% Confidence
                       </span>
                     </div>
 
-                    <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                    <h3 className="text-sm font-bold text-foreground">
                       {opp.title}
                     </h3>
 
-                    <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       {opp.explanation}
                     </p>
 
-                    {/* AI Strategic Insight if available */}
+                    {/* AI Strategic Guidance */}
                     {opp.strategicInsight && (
-                      <div className="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-300 flex items-start gap-2">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
+                      <div className="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-950 dark:text-indigo-200 flex items-start gap-2">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
                         <div>
-                          <span className="font-semibold">AI Strategic Insight:</span>{" "}
+                          <span className="font-semibold">AI Strategic Guidance:</span>{" "}
                           {opp.strategicInsight}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Value & Action Panel */}
-                  <div className="flex sm:flex-col items-end justify-between sm:justify-center gap-3 lg:border-l lg:border-neutral-100 dark:lg:border-neutral-800 lg:pl-5 shrink-0">
+                  {/* Right Value & Actions */}
+                  <div className="flex sm:flex-col items-end justify-between sm:justify-center gap-3 lg:border-l lg:border-border/70 lg:pl-5 shrink-0">
                     <div className="text-right">
-                      <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                        Estimated Value
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Estimated Opportunity
                       </span>
-                      <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                        ₹{Math.round(opp.estimatedValue).toLocaleString("en-IN")}
+                      <div>
+                        <FinancialValue
+                          value={Math.round(opp.estimatedValue)}
+                          variant="revenue"
+                          size="xl"
+                        />
                       </div>
-                      <div className="text-xs text-neutral-500 mt-0.5">
-                        {opp.targetCustomerCount} Eligible Buyers
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {opp.targetCustomerCount} Eligible {opp.targetCustomerCount === 1 ? "Buyer" : "Buyers"}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => toggleEvidence(oppKey)}
-                        className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white gap-1"
+                        className="text-xs text-muted-foreground hover:text-foreground"
                       >
                         {isExpanded ? (
                           <>
-                            Less Evidence <ChevronUp className="w-3.5 h-3.5" />
+                            <span>Evidence</span>
+                            <ChevronUp className="w-3 h-3 ml-1" />
                           </>
                         ) : (
                           <>
-                            View Evidence <ChevronDown className="w-3.5 h-3.5" />
+                            <span>Evidence</span>
+                            <ChevronDown className="w-3 h-3 ml-1" />
                           </>
                         )}
                       </Button>
 
                       {opp.id && onPlanOpportunity && (
                         <Button
-                          size="sm"
                           variant="outline"
+                          size="sm"
                           onClick={() => onPlanOpportunity(opp.id!)}
-                          className="border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-xs font-semibold gap-1.5 cursor-pointer shadow-xs"
+                          className="text-xs"
                         >
-                          <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                          Plan Campaign
+                          <Bot className="w-3 h-3 mr-1 text-neutral-500" />
+                          Plan
                         </Button>
                       )}
 
                       {opp.id && (
                         <Button
+                          variant="default"
                           size="sm"
                           onClick={() => onSelectOpportunity(opp.id!)}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs gap-1 cursor-pointer"
+                          className="text-xs"
                         >
-                          Target Customers
-                          <ArrowRight className="w-3.5 h-3.5" />
+                          Target Buyers
+                          <ArrowRight className="w-3 h-3 ml-1" />
                         </Button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Expanded Deterministic Evidence Details */}
+                {/* Expanded Technical Evidence Details */}
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-                      Authoritative Database Evidence
+                  <div className="mt-3.5 pt-3.5 border-t border-border/70 space-y-2.5">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-neutral-500" />
+                      Authoritative Grounding Metrics
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-neutral-50 dark:bg-black/40 p-3 rounded-xl border border-neutral-200/60 dark:border-neutral-800 text-xs font-mono">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-neutral-50/80 dark:bg-neutral-900/60 p-3 rounded-lg border border-border text-xs font-mono">
                       {opp.evidence.sourceCustomers !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Source Product Buyers</div>
-                          <div className="font-bold text-neutral-800 dark:text-neutral-200">
+                          <div className="text-muted-foreground text-[10px]">Source Product Buyers</div>
+                          <div className="font-bold text-foreground">
                             {opp.evidence.sourceCustomers}
                           </div>
                         </div>
@@ -378,8 +379,8 @@ export function GrowthIntelligencePanel({
 
                       {opp.evidence.customersTogether !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Co-Purchasers (A + B)</div>
-                          <div className="font-bold text-neutral-800 dark:text-neutral-200">
+                          <div className="text-muted-foreground text-[10px]">Co-Purchasers (A + B)</div>
+                          <div className="font-bold text-foreground">
                             {opp.evidence.customersTogether}
                           </div>
                         </div>
@@ -387,7 +388,7 @@ export function GrowthIntelligencePanel({
 
                       {opp.evidence.attachRate !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Observed Attach Rate</div>
+                          <div className="text-muted-foreground text-[10px]">Attach Rate</div>
                           <div className="font-bold text-indigo-600 dark:text-indigo-400">
                             {(opp.evidence.attachRate * 100).toFixed(1)}%
                           </div>
@@ -396,17 +397,17 @@ export function GrowthIntelligencePanel({
 
                       {opp.evidence.targetPrice !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Authoritative Price</div>
-                          <div className="font-bold text-emerald-600">
-                            ₹{opp.evidence.targetPrice.toLocaleString("en-IN")}
+                          <div className="text-muted-foreground text-[10px]">Authoritative Price</div>
+                          <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                            <FinancialValue value={opp.evidence.targetPrice} size="xs" variant="revenue" />
                           </div>
                         </div>
                       )}
 
                       {opp.evidence.dormantCustomerCount !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Dormant Customers</div>
-                          <div className="font-bold text-amber-600">
+                          <div className="text-muted-foreground text-[10px]">Dormant Buyers</div>
+                          <div className="font-bold text-amber-600 dark:text-amber-400">
                             {opp.evidence.dormantCustomerCount}
                           </div>
                         </div>
@@ -414,20 +415,20 @@ export function GrowthIntelligencePanel({
 
                       {opp.evidence.repeatPurchaseRate !== undefined && (
                         <div>
-                          <div className="text-neutral-400 text-[10px]">Repeat Rate</div>
-                          <div className="font-bold text-indigo-600">
+                          <div className="text-muted-foreground text-[10px]">Repeat Rate</div>
+                          <div className="font-bold text-foreground">
                             {(opp.evidence.repeatPurchaseRate * 100).toFixed(1)}%
                           </div>
                         </div>
                       )}
                     </div>
 
-                    <div className="text-[11px] text-neutral-500 italic">
-                      Ranking formula: {opp.scoringBreakdown?.formula || "score = (normalizedEstimatedValue * 0.5) + (evidenceStrength * 0.3) + (confidence * 0.2)"}
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      Formula: {opp.scoringBreakdown?.formula || "score = (normalizedEstimatedValue * 0.5) + (evidenceStrength * 0.3) + (confidence * 0.2)"}
                     </div>
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })
         )}

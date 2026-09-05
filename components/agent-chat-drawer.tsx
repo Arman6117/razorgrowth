@@ -13,16 +13,12 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
-  Coins,
   Cpu,
-  Layers,
   ArrowRight,
-  Info,
-  CornerDownLeft,
-  Users,
-  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AIBadge } from "@/components/ui/ai-badge";
+import { FinancialValue } from "@/components/ui/financial-value";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -111,42 +107,27 @@ function normalizeMarkdownContent(text: string): string {
 
 const markdownComponents: Components = {
   h1: ({ children, ...props }) => (
-    <h1 className="text-base font-bold mt-3 mb-1.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
+    <h1 className="text-sm font-bold mt-2.5 mb-1 text-foreground first:mt-0" {...props}>
       {children}
     </h1>
   ),
   h2: ({ children, ...props }) => (
-    <h2 className="text-sm font-bold mt-2.5 mb-1 text-neutral-900 dark:text-white first:mt-0" {...props}>
+    <h2 className="text-xs font-bold mt-2 mb-1 text-foreground first:mt-0" {...props}>
       {children}
     </h2>
   ),
   h3: ({ children, ...props }) => (
-    <h3 className="text-sm font-semibold mt-2 mb-1 text-neutral-900 dark:text-white first:mt-0" {...props}>
+    <h3 className="text-xs font-semibold mt-1.5 mb-0.5 text-foreground first:mt-0" {...props}>
       {children}
     </h3>
   ),
-  h4: ({ children, ...props }) => (
-    <h4 className="text-xs font-semibold mt-1.5 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
-      {children}
-    </h4>
-  ),
-  h5: ({ children, ...props }) => (
-    <h5 className="text-xs font-semibold mt-1 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
-      {children}
-    </h5>
-  ),
-  h6: ({ children, ...props }) => (
-    <h6 className="text-xs font-semibold mt-1 mb-0.5 text-neutral-900 dark:text-white first:mt-0" {...props}>
-      {children}
-    </h6>
-  ),
   p: ({ children, ...props }) => (
-    <p className="mb-2 last:mb-0 leading-relaxed" {...props}>
+    <p className="mb-2 last:mb-0 leading-relaxed text-xs" {...props}>
       {children}
     </p>
   ),
   strong: ({ children, ...props }) => (
-    <strong className="font-semibold text-neutral-900 dark:text-neutral-100" {...props}>
+    <strong className="font-semibold text-foreground" {...props}>
       {children}
     </strong>
   ),
@@ -156,12 +137,12 @@ const markdownComponents: Components = {
     </em>
   ),
   ul: ({ children, ...props }) => (
-    <ul className="list-disc pl-5 my-2 space-y-1" {...props}>
+    <ul className="list-disc pl-4 my-1.5 space-y-0.5 text-xs" {...props}>
       {children}
     </ul>
   ),
   ol: ({ children, ...props }) => (
-    <ol className="list-decimal pl-5 my-2 space-y-1" {...props}>
+    <ol className="list-decimal pl-4 my-1.5 space-y-0.5 text-xs" {...props}>
       {children}
     </ol>
   ),
@@ -175,7 +156,7 @@ const markdownComponents: Components = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-600 dark:text-blue-400 underline hover:underline underline-offset-2 break-all"
+      className="text-indigo-600 dark:text-indigo-400 underline hover:opacity-80 break-all"
       {...props}
     >
       {children}
@@ -183,7 +164,7 @@ const markdownComponents: Components = {
   ),
   pre: ({ children, ...props }) => (
     <pre
-      className="p-3 my-2 rounded-lg bg-neutral-900 dark:bg-black text-neutral-100 font-mono text-xs overflow-x-auto border border-neutral-800"
+      className="p-2.5 my-1.5 rounded-md bg-neutral-950 text-neutral-200 font-mono text-[11px] overflow-x-auto border border-border"
       {...props}
     >
       {children}
@@ -200,7 +181,7 @@ const markdownComponents: Components = {
     }
     return (
       <code
-        className="px-1.5 py-0.5 rounded bg-neutral-200/80 dark:bg-neutral-700/80 font-mono text-[12px] text-neutral-800 dark:text-neutral-200"
+        className="px-1 py-0.5 rounded bg-neutral-200/70 dark:bg-neutral-800 font-mono text-[11px] text-foreground"
         {...props}
       >
         {children}
@@ -209,31 +190,14 @@ const markdownComponents: Components = {
   },
   blockquote: ({ children, ...props }) => (
     <blockquote
-      className="border-l-2 border-purple-500 pl-3 my-2 italic text-neutral-600 dark:text-neutral-300"
+      className="border-l-2 border-indigo-500 pl-2.5 my-1.5 italic text-muted-foreground text-xs"
       {...props}
     >
       {children}
     </blockquote>
   ),
   hr: ({ ...props }) => (
-    <hr className="my-3 border-neutral-200 dark:border-neutral-700" {...props} />
-  ),
-  table: ({ children, ...props }) => (
-    <div className="my-2 overflow-x-auto">
-      <table className="min-w-full divide-y divide-neutral-200 dark:divide-neutral-700 text-xs text-left" {...props}>
-        {children}
-      </table>
-    </div>
-  ),
-  th: ({ children, ...props }) => (
-    <th className="px-2.5 py-1.5 font-semibold bg-neutral-200/50 dark:bg-neutral-800 text-neutral-900 dark:text-white" {...props}>
-      {children}
-    </th>
-  ),
-  td: ({ children, ...props }) => (
-    <td className="px-2.5 py-1.5 border-t border-neutral-200 dark:border-neutral-700" {...props}>
-      {children}
-    </td>
+    <hr className="my-2.5 border-border" {...props} />
   ),
 };
 
@@ -273,7 +237,6 @@ export function AgentChatDrawer({
   useEffect(() => {
     if (isOpen) {
       scrollToBottom();
-      // Auto-focus input when opened
       setTimeout(() => textareaRef.current?.focus(), 150);
     }
   }, [isOpen, messages, loading]);
@@ -302,7 +265,6 @@ export function AgentChatDrawer({
     setLoading(true);
 
     try {
-      // Call the authoritative existing /api/agent endpoint
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -313,7 +275,6 @@ export function AgentChatDrawer({
       });
 
       const data: AgentResponseData = await res.json();
-
       const agentMessageId = `agent-${Date.now()}`;
 
       if (!res.ok || !data.success) {
@@ -341,7 +302,6 @@ export function AgentChatDrawer({
           },
         ]);
 
-        // Refresh dashboard statistics & opportunities if actions or discoveries were made
         if (
           (data.actionsCreated && data.actionsCreated.length > 0) ||
           (data.opportunitiesFound && data.opportunitiesFound.length > 0)
@@ -387,62 +347,56 @@ export function AgentChatDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end transition-opacity animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-white dark:bg-neutral-900 h-full shadow-2xl flex flex-col border-l border-neutral-200 dark:border-neutral-800">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end transition-opacity animate-in fade-in duration-150">
+      <div className="w-full max-w-xl bg-card h-full shadow-2xl flex flex-col border-l border-border">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white flex items-center justify-center shadow-md shadow-purple-500/20">
-              <Bot className="w-5 h-5" />
+        <div className="p-4 sm:p-5 border-b border-border bg-card flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center shadow-xs">
+              <Bot className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-neutral-900 dark:text-white">
-                  RazorGrowth AI Agent
+                <h3 className="font-bold text-sm text-foreground">
+                  Growth Agent
                 </h3>
-                <span className="text-[11px] px-2 py-0.5 font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                  Autonomous Orchestrator
-                </span>
+                <AIBadge variant="subtle" icon="none">
+                  Autonomous
+                </AIBadge>
               </div>
-              <p className="text-xs text-neutral-500">
-                Connected to: <strong className="text-neutral-700 dark:text-neutral-300">{merchantName}</strong>
+              <p className="text-[11px] text-muted-foreground">
+                Merchant: <strong className="text-foreground">{merchantName}</strong>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={handleClearHistory}
-              title="Clear chat conversation"
-              className="p-2 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              title="Clear conversation"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Safety Guardrail Policy Banner */}
-        <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-b border-blue-200 dark:border-blue-800/60 flex items-center justify-between text-xs text-blue-900 dark:text-blue-200">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>
-              <strong>Financial Guardrails Active:</strong> Actions created by the agent are placed in{" "}
-              <code className="px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 font-semibold text-[11px]">
-                PENDING_APPROVAL
-              </code>
-              . Direct financial approval remains strictly merchant-controlled.
-            </span>
-          </div>
+        <div className="px-4 py-2 bg-neutral-50 dark:bg-neutral-900 border-b border-border flex items-center gap-2 text-[11px] text-muted-foreground">
+          <ShieldCheck className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <span>
+            Financial guardrails active: Actions initialize in <code className="font-mono text-[10px] px-1 rounded bg-neutral-200/70 dark:bg-neutral-800">PENDING_APPROVAL</code>.
+          </span>
         </div>
 
-        {/* Chat Message Stream */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        {/* Chat Stream */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
           {messages.map((msg) => {
             const isUser = msg.sender === "user";
             const data = msg.data;
@@ -451,7 +405,6 @@ export function AgentChatDrawer({
             const hasCreatedActions = data?.actionsCreated && data.actionsCreated.length > 0;
             const isToolsExpanded = expandedTools[msg.id];
 
-            // Extract batch creation stats if available
             let batchCreatedCount = 0;
             let batchDuplicateCount = 0;
             let batchRejectedCount = 0;
@@ -472,30 +425,30 @@ export function AgentChatDrawer({
             return (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
+                className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}
               >
                 {!isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                    <Bot className="w-4 h-4" />
+                  <div className="w-6 h-6 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 flex items-center justify-center shrink-0 mt-0.5 border border-border">
+                    <Bot className="w-3.5 h-3.5" />
                   </div>
                 )}
 
                 <div
-                  className={`max-w-[85%] space-y-3 ${
+                  className={`max-w-[85%] space-y-2.5 ${
                     isUser
-                      ? "bg-blue-600 text-white p-3.5 rounded-2xl rounded-tr-xs shadow-sm"
+                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 p-3 rounded-xl shadow-xs"
                       : msg.isError
-                      ? "bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 border border-rose-200 dark:border-rose-900/60 p-4 rounded-2xl rounded-tl-xs shadow-sm"
-                      : "bg-neutral-100 dark:bg-neutral-800/70 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700/60 p-4 rounded-2xl rounded-tl-xs shadow-sm"
+                      ? "bg-rose-50/70 dark:bg-rose-950/30 text-rose-900 dark:text-rose-100 border border-rose-200 dark:border-rose-900/50 p-3.5 rounded-xl shadow-xs"
+                      : "bg-neutral-50/80 dark:bg-neutral-900/60 text-foreground border border-border p-3.5 rounded-xl shadow-xs"
                   }`}
                 >
-                  {/* Message Main Body */}
+                  {/* Message Body */}
                   {isUser ? (
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                    <div className="text-xs leading-relaxed whitespace-pre-wrap font-sans">
                       {msg.text}
                     </div>
                   ) : (
-                    <div className="text-sm leading-relaxed font-sans">
+                    <div className="text-xs leading-relaxed font-sans">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         components={markdownComponents}
@@ -505,57 +458,51 @@ export function AgentChatDrawer({
                     </div>
                   )}
 
-                  {/* High-Level Structured Batch Action Summary (Requirement 5) */}
+                  {/* Actions Created Summary */}
                   {!isUser && (hasCreatedActions || batchCreatedCount > 0) && (
-                    <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100 text-xs space-y-2">
+                    <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs space-y-1.5">
                       <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>
-                          GrowthActions Created: {batchCreatedCount || data?.actionsCreated?.length || 0} (PENDING_APPROVAL)
+                          GrowthActions Prepared: {batchCreatedCount || data?.actionsCreated?.length || 0} (PENDING_APPROVAL)
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                      <div className="flex flex-wrap gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-300 font-mono">
                         {batchDuplicateCount > 0 && (
-                          <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60">
-                            {batchDuplicateCount} duplicate active actions skipped
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60">
+                            {batchDuplicateCount} active duplicates skipped
                           </span>
                         )}
                         {batchRejectedCount > 0 && (
-                          <span className="px-2 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
-                            {batchRejectedCount} ineligible customers filtered out
+                          <span className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                            {batchRejectedCount} ineligible excluded
                           </span>
                         )}
                       </div>
-
-                      <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-1">
-                        All actions were initialized with authoritative pricing from the database. Review and approve them on your dashboard to proceed to Razorpay execution.
-                      </p>
                     </div>
                   )}
 
                   {/* Discovered Opportunities Card Summary */}
                   {!isUser && hasOpportunities && !hasCreatedActions && (
-                    <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-xs space-y-2">
-                      <div className="font-semibold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <div className="p-2.5 rounded-lg bg-card border border-border text-xs space-y-1.5">
+                      <div className="font-semibold text-foreground flex items-center gap-1.5 text-[11px]">
+                        <Sparkles className="w-3 h-3 text-indigo-500" />
                         <span>Discovered Opportunities ({data?.opportunitiesFound.length})</span>
                       </div>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      <div className="space-y-1 max-h-36 overflow-y-auto">
                         {data?.opportunitiesFound.slice(0, 3).map((opp, idx) => (
                           <div
                             key={idx}
-                            className="p-2 rounded-lg bg-white dark:bg-neutral-900 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between text-[11px]"
+                            className="p-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800/60 border border-border flex items-center justify-between text-[11px]"
                           >
-                            <div className="font-medium text-neutral-800 dark:text-neutral-200 flex items-center gap-1">
+                            <div className="font-medium text-foreground flex items-center gap-1">
                               <span>{opp.sourceProductName}</span>
-                              <ArrowRight className="w-3 h-3 text-neutral-400" />
-                              <span className="text-blue-600 dark:text-blue-400 font-bold">
-                                {opp.targetProductName}
-                              </span>
+                              <ArrowRight className="w-2.5 h-2.5 text-muted-foreground" />
+                              <span className="font-semibold">{opp.targetProductName}</span>
                             </div>
-                            <div className="font-mono text-emerald-600 font-bold">
-                              ₹{opp.expectedRevenue?.toLocaleString("en-IN")}
+                            <div>
+                              <FinancialValue value={opp.expectedRevenue || 0} size="xs" variant="revenue" />
                             </div>
                           </div>
                         ))}
@@ -565,37 +512,35 @@ export function AgentChatDrawer({
 
                   {/* Deterministic Tools Executed Expander */}
                   {!isUser && hasToolCalls && (
-                    <div className="pt-2 border-t border-neutral-200 dark:border-neutral-700/60">
+                    <div className="pt-2 border-t border-border/70">
                       <button
                         onClick={() => toggleToolDetails(msg.id)}
-                        className="flex items-center justify-between w-full text-xs font-semibold text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
+                        className="flex items-center justify-between w-full text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                       >
-                        <span className="flex items-center gap-1.5">
-                          <Cpu className="w-3.5 h-3.5 text-purple-600" />
-                          Deterministic Tools Executed ({data?.toolCalls.length})
+                        <span className="flex items-center gap-1.5 font-mono">
+                          <Cpu className="w-3 h-3 text-neutral-500" />
+                          Deterministic Tools ({data?.toolCalls.length})
                         </span>
                         {isToolsExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5" />
+                          <ChevronUp className="w-3 h-3" />
                         ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ChevronDown className="w-3 h-3" />
                         )}
                       </button>
 
                       {isToolsExpanded && (
-                        <div className="mt-2.5 space-y-2 animate-in fade-in duration-150">
+                        <div className="mt-2 space-y-1.5">
                           {data?.toolCalls.map((tc, idx) => (
                             <div
                               key={idx}
-                              className="p-2.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono"
+                              className="p-2 rounded-md bg-card border border-border text-[11px] font-mono"
                             >
-                              <div className="flex items-center justify-between font-bold text-purple-700 dark:text-purple-400">
+                              <div className="flex items-center justify-between font-semibold text-foreground">
                                 <span>{tc.toolName}()</span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 font-sans">
-                                  Step {idx + 1}
-                                </span>
+                                <span className="text-[10px] text-muted-foreground">Step {idx + 1}</span>
                               </div>
-                              <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 break-all">
-                                <strong>Args:</strong> {JSON.stringify(tc.args)}
+                              <div className="mt-0.5 text-[10px] text-muted-foreground break-all">
+                                {JSON.stringify(tc.args)}
                               </div>
                             </div>
                           ))}
@@ -606,10 +551,10 @@ export function AgentChatDrawer({
 
                   {/* Timestamp */}
                   <div
-                    className={`text-[10px] ${
+                    className={`text-[10px] font-mono ${
                       isUser
-                        ? "text-blue-200 text-right"
-                        : "text-neutral-400 dark:text-neutral-500"
+                        ? "text-neutral-300 dark:text-neutral-600 text-right"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {msg.timestamp}
@@ -621,17 +566,14 @@ export function AgentChatDrawer({
 
           {/* Loading Indicator */}
           {loading && (
-            <div className="flex gap-3 justify-start items-start animate-in fade-in">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm animate-pulse">
-                <Bot className="w-4 h-4" />
+            <div className="flex gap-2.5 justify-start items-start">
+              <div className="w-6 h-6 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 flex items-center justify-center shrink-0 border border-border">
+                <Bot className="w-3.5 h-3.5" />
               </div>
-              <div className="p-4 rounded-2xl rounded-tl-xs bg-neutral-100 dark:bg-neutral-800/70 border border-neutral-200 dark:border-neutral-700/60 max-w-[85%] space-y-2">
-                <div className="flex items-center gap-2 text-xs font-medium text-purple-700 dark:text-purple-300">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>AI Agent analyzing merchant data & running deterministic tools...</span>
-                </div>
-                <div className="h-1.5 w-48 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-600 rounded-full animate-pulse w-2/3"></div>
+              <div className="p-3 rounded-xl bg-neutral-50/80 dark:bg-neutral-900/60 border border-border max-w-[85%] space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Analyzing merchant sales & running tools...</span>
                 </div>
               </div>
             </div>
@@ -640,11 +582,11 @@ export function AgentChatDrawer({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Suggested Quick Prompt Chips (Requirement 8) */}
-        <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-800">
-          <div className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 mb-1.5 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-indigo-500" />
-            <span>Example Natural-Language Requests</span>
+        {/* Suggested Quick Prompt Chips */}
+        <div className="p-3 bg-neutral-50/70 dark:bg-neutral-900/50 border-t border-border">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-neutral-400" />
+            <span>Example Instructions</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLE_PROMPTS.map((prompt, idx) => (
@@ -655,7 +597,7 @@ export function AgentChatDrawer({
                   textareaRef.current?.focus();
                 }}
                 disabled={loading}
-                className="px-2.5 py-1 rounded-full text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 dark:hover:border-purple-700 text-neutral-700 dark:text-neutral-300 transition-all text-left truncate max-w-full cursor-pointer"
+                className="px-2.5 py-1 rounded-md text-[11px] bg-card border border-border hover:border-neutral-400 text-foreground transition-all text-left truncate max-w-full cursor-pointer shadow-2xs"
               >
                 {prompt}
               </button>
@@ -664,7 +606,7 @@ export function AgentChatDrawer({
         </div>
 
         {/* Message Input Bar */}
-        <div className="p-4 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+        <div className="p-3.5 border-t border-border bg-card">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -681,35 +623,34 @@ export function AgentChatDrawer({
                 disabled={loading || !merchantId}
                 placeholder={
                   merchantId
-                    ? "Ask the AI agent to analyze your sales, find cross-sell opportunities, or create actions..."
+                    ? "Ask the AI agent to analyze sales, check eligibility, or prepare actions..."
                     : "Connecting to merchant profile..."
                 }
                 rows={2}
-                className="w-full resize-none rounded-xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-3 pr-10 text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:border-purple-500 focus:bg-white dark:focus:bg-neutral-800 focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 disabled:opacity-50"
+                className="w-full resize-none rounded-lg border border-border bg-neutral-50/60 dark:bg-neutral-900/60 p-2.5 pr-10 text-xs text-foreground placeholder:text-muted-foreground focus:border-neutral-400 focus:bg-card focus:outline-none disabled:opacity-50"
               />
-              <div className="absolute right-2.5 bottom-2.5 hidden sm:flex items-center gap-1 text-[10px] text-neutral-400 font-mono">
+              <div className="absolute right-2 bottom-2 hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
                 <span>Enter ↵</span>
               </div>
             </div>
 
             <Button
               type="submit"
+              variant="default"
+              size="default"
               disabled={loading || !inputValue.trim() || !merchantId}
-              className="h-11 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-md disabled:opacity-50 transition-all gap-1.5 cursor-pointer"
+              className="h-10 px-3.5"
             >
               {loading ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <>
-                  <Send className="w-4 h-4" />
-                  <span className="hidden sm:inline">Send</span>
+                  <Send className="w-3.5 h-3.5 mr-1" />
+                  <span>Send</span>
                 </>
               )}
             </Button>
           </form>
-          <div className="mt-2 text-[10px] text-center text-neutral-400">
-            Powered by Vercel AI SDK • Communicates authoritatively with deterministic backend tools.
-          </div>
         </div>
       </div>
     </div>

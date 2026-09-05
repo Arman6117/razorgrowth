@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Upload, X, Loader2 } from "lucide-react";
+import { Upload, X, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface CsvImportModalProps {
@@ -56,27 +56,27 @@ export function CsvImportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-xl max-w-lg w-full p-5 shadow-2xl space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600">
+            <div className="w-7 h-7 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center shadow-xs">
               <Upload className="w-4 h-4" />
             </div>
-            <h3 className="font-bold text-base text-neutral-900 dark:text-white">
+            <h3 className="font-bold text-sm text-foreground">
               Import Product Catalog (CSV)
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+            className="p-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <p className="text-xs text-neutral-500">
-          Paste your CSV content below or load a template. Required columns: <code>name</code>, <code>price</code>.
+        <p className="text-xs text-muted-foreground">
+          Provide CSV rows with authoritative product pricing. Required columns: <code className="font-mono text-[11px] px-1 rounded bg-neutral-100 dark:bg-neutral-800">name</code>, <code className="font-mono text-[11px] px-1 rounded bg-neutral-100 dark:bg-neutral-800">price</code>.
         </p>
 
         <form onSubmit={handleImportCsv} className="space-y-3">
@@ -87,21 +87,21 @@ export function CsvImportModal({
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
               placeholder={`name,description,category,price,active\nWireless Mouse,Ergonomic wireless mouse,Accessories,1299,true\nMechanical Keyboard,RGB mechanical keyboard,Accessories,4999,true\n4K Ultra Monitor,32-inch 4K UHD display,Monitors,24999,true`}
-              className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-xl text-xs font-mono text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
+              className="w-full px-3 py-2 bg-neutral-50/70 dark:bg-neutral-900/50 border border-border rounded-lg text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-neutral-400 resize-none"
             />
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() =>
                 setCsvText(
                   `name,description,category,price,active\nPro Wireless Earbuds,Active noise cancelling earbuds,Audio,3999,true\nSmart Fitness Band,Water resistant fitness tracker,Wearables,2499,true\nFast Wireless Charger,15W Qi fast charging pad,Accessories,999,true`
                 )
               }
-              className="text-[11px] text-neutral-500"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
             >
               Load Sample Template
             </Button>
@@ -118,13 +118,14 @@ export function CsvImportModal({
               </Button>
               <Button
                 type="submit"
+                variant="default"
                 disabled={importingCsv}
                 size="sm"
-                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                className="text-xs"
               >
                 {importingCsv ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <RefreshCw className="w-3 h-3 animate-spin mr-1.5" />
                     Importing...
                   </>
                 ) : (

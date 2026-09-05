@@ -1,6 +1,7 @@
 import React from "react";
-import { Key, Upload } from "lucide-react";
+import { Key, Upload, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { MerchantInfo, RazorpayConnectionInfo } from "@/lib/dashboard/types";
 
 interface StoreIntegrationProps {
@@ -23,45 +24,47 @@ export function StoreIntegration({
   onOpenCsvModal,
 }: StoreIntegrationProps) {
   return (
-    <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
+    <Card className="p-5 space-y-4 bg-card border-border">
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-3">
         <div>
-          <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-            <Key className="w-4 h-4 text-indigo-500" />
-            Store Integration & Data Ingestion
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Key className="w-4 h-4 text-neutral-500" />
+            Commerce Data Ingestion & Gateway
           </h3>
-          <p className="text-xs text-neutral-500">
-            Connect Razorpay Test Mode and synchronize transaction history or import product catalog.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Connect Razorpay test credentials to ingest order history and issue payment links.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+        <div className="flex items-center gap-2 text-xs select-none">
+          <span className="px-2.5 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-mono text-[11px]">
             Customers: <strong>{merchant?.counts.customers || 0}</strong>
           </span>
-          <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+          <span className="px-2.5 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-mono text-[11px]">
             Orders: <strong>{merchant?.counts.orders || 0}</strong>
           </span>
-          <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+          <span className="px-2.5 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-mono text-[11px]">
             Products: <strong>{merchant?.counts.products || 0}</strong>
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Control Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
         {/* Razorpay Connection Card */}
-        <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+        <div className="p-4 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border flex flex-col justify-between space-y-3">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Razorpay Gateway
               </span>
               {connectionInfo?.connected ? (
-                <span className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                <span className="text-[10px] px-2 py-0.5 font-medium rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center gap-1 select-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Connected (Test)
                 </span>
               ) : (
-                <span className="text-[10px] px-2 py-0.5 font-semibold rounded-full bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">
+                <span className="text-[10px] px-2 py-0.5 font-medium rounded-md bg-neutral-200/70 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 select-none">
                   Not Connected
                 </span>
               )}
@@ -69,36 +72,37 @@ export function StoreIntegration({
             <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
               {connectionInfo?.connected ? (
                 <>
-                  <p className="font-mono text-neutral-800 dark:text-neutral-200">
+                  <p className="font-mono text-[11px] text-foreground">
                     {connectionInfo.connection?.keyId.slice(0, 12)}...
                   </p>
-                  <p className="text-[11px] text-neutral-400 mt-1">
-                    Last Synced: {connectionInfo.connection?.lastSyncedAt ? new Date(connectionInfo.connection.lastSyncedAt).toLocaleString() : "Never"}
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Last Synced: {connectionInfo.connection?.lastSyncedAt ? new Date(connectionInfo.connection.lastSyncedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "Never"}
                   </p>
                 </>
               ) : (
-                <p className="text-neutral-400">
-                  Connect your Razorpay Test Key ID & Secret to sync live orders and send payment links.
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  Connect Razorpay Key ID and Secret to synchronize customers, verify orders, and dispatch payment links.
                 </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-2">
+          <div className="pt-2">
             {connectionInfo?.connected ? (
               <Button
-                variant="outline"
+                variant="destructive"
                 size="sm"
                 onClick={onDisconnectRazorpay}
-                className="w-full text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 cursor-pointer"
+                className="w-full text-xs"
               >
-                Disconnect
+                Disconnect Gateway
               </Button>
             ) : (
               <Button
+                variant="default"
                 size="sm"
                 onClick={onOpenConnectModal}
-                className="w-full text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                className="w-full text-xs"
               >
                 Connect Razorpay
               </Button>
@@ -107,13 +111,13 @@ export function StoreIntegration({
         </div>
 
         {/* Data Sync Card */}
-        <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+        <div className="p-4 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border flex flex-col justify-between space-y-3">
           <div>
-            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-              Razorpay Data Sync
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Transaction Synchronization
             </span>
-            <p className="mt-1 text-xs text-neutral-500">
-              Fetch customer records and transaction orders directly from Razorpay APIs.
+            <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+              Fetch authoritative customer records and transaction orders directly from Razorpay APIs.
             </p>
           </div>
 
@@ -123,38 +127,60 @@ export function StoreIntegration({
               size="sm"
               disabled={syncingType !== null}
               onClick={() => onSyncData("customers")}
-              className="text-xs px-2 cursor-pointer"
+              className="text-xs px-1.5"
             >
-              {syncingType === "customers" ? "Syncing..." : "Customers"}
+              {syncingType === "customers" ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Syncing</span>
+                </>
+              ) : (
+                "Customers"
+              )}
             </Button>
             <Button
               variant="outline"
               size="sm"
               disabled={syncingType !== null}
               onClick={() => onSyncData("orders")}
-              className="text-xs px-2 cursor-pointer"
+              className="text-xs px-1.5"
             >
-              {syncingType === "orders" ? "Syncing..." : "Orders"}
+              {syncingType === "orders" ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Syncing</span>
+                </>
+              ) : (
+                "Orders"
+              )}
             </Button>
             <Button
+              variant="default"
               size="sm"
               disabled={syncingType !== null}
               onClick={() => onSyncData("all")}
-              className="text-xs px-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 cursor-pointer"
+              className="text-xs px-1.5"
             >
-              {syncingType === "all" ? "Syncing..." : "Sync All"}
+              {syncingType === "all" ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>All</span>
+                </>
+              ) : (
+                "Sync All"
+              )}
             </Button>
           </div>
         </div>
 
         {/* Product Catalog Import Card */}
-        <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 flex flex-col justify-between space-y-3">
+        <div className="p-4 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border flex flex-col justify-between space-y-3">
           <div>
-            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-              Product Catalog
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Product Catalog Ingestion
             </span>
-            <p className="mt-1 text-xs text-neutral-500">
-              Import products with prices and categories using simple CSV ingestion.
+            <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+              Import and maintain authoritative product pricing and category metadata via CSV.
             </p>
           </div>
 
@@ -163,14 +189,14 @@ export function StoreIntegration({
               variant="outline"
               size="sm"
               onClick={onOpenCsvModal}
-              className="w-full text-xs gap-1.5 cursor-pointer"
+              className="w-full text-xs"
             >
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-3.5 h-3.5 mr-1.5" />
               Import Product CSV
             </Button>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
