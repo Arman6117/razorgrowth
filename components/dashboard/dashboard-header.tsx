@@ -1,8 +1,11 @@
 import React from "react";
-import { Zap, Bot, RefreshCw, LogOut, MessageSquare } from "lucide-react";
+import { Zap, Bot, RefreshCw, LogOut, MessageSquare, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MerchantInfo, RazorpayConnectionInfo } from "@/lib/dashboard/types";
 
 interface DashboardHeaderProps {
+  merchant: MerchantInfo | null;
+  connectionInfo: RazorpayConnectionInfo | null;
   refreshing: boolean;
   onOpenChatDrawer: () => void;
   onOpenAgentPanel: () => void;
@@ -11,6 +14,8 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({
+  merchant,
+  connectionInfo,
   refreshing,
   onOpenChatDrawer,
   onOpenAgentPanel,
@@ -19,77 +24,84 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-3">
         {/* Brand & Product Positioning */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-xs">
-            <Zap className="w-4 h-4 fill-current" />
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-xs">
+            <Zap className="w-3.5 h-3.5 fill-current" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="font-bold text-sm tracking-tight text-foreground">
                 RazorGrowth
               </span>
-              <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 font-medium rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 select-none">
+              <span className="hidden md:inline-flex text-[10px] px-1.5 py-0.2 font-medium rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-border select-none">
                 Revenue Operations
               </span>
             </div>
-            <p className="text-[11px] text-muted-foreground hidden sm:block">
-              Commerce Intelligence & Opportunity Engine
-            </p>
           </div>
         </div>
 
-        {/* Status Indicators & Action Hierarchy */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-neutral-100/80 dark:bg-neutral-800/80 text-[11px] font-mono text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 select-none">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Razorpay Test Mode
+        {/* Merchant & Gateway Context (Centered, replaces bulky KPI card) */}
+        <div className="hidden sm:flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 border border-border text-muted-foreground">
+            <Store className="w-3 h-3 text-neutral-400" />
+            <span className="font-semibold text-foreground">{merchant?.name || "TechNova Store"}</span>
+            <span className="text-neutral-300 dark:text-neutral-700">•</span>
+            <span className="font-mono text-[11px]">{merchant?.currency || "INR"} (₹)</span>
           </div>
 
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 text-[11px] font-mono text-muted-foreground border border-border select-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {connectionInfo?.connected ? "Razorpay Gateway Connected" : "Razorpay Test Mode"}
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Secondary: Developer Tools */}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={onOpenAgentPanel}
-            className="text-xs"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
-            <Bot className="w-3.5 h-3.5 text-neutral-500" />
-            <span className="hidden sm:inline">Tools</span>
+            <Bot className="w-3.5 h-3.5 mr-1 text-neutral-500" />
+            <span className="hidden lg:inline">Tools</span>
           </Button>
 
           {/* Secondary: Refresh */}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={onRefresh}
             disabled={refreshing}
-            className="text-xs"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
-            <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin text-neutral-400" : ""}`} />
+            <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin text-neutral-400" : ""} sm:mr-1`} />
             <span className="hidden sm:inline">Refresh</span>
           </Button>
 
-          {/* Primary Action: Growth Copilot Drawer */}
+          {/* Assistant: Growth Agent Drawer */}
           <Button
-            variant="ai"
+            variant="outline"
             size="sm"
             onClick={onOpenChatDrawer}
-            className="text-xs"
+            className="text-xs gap-1.5"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
+            <MessageSquare className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
             <span>Growth Agent</span>
           </Button>
 
-          {/* Tertiary / Destructive: Logout */}
+          {/* Tertiary: Sign Out */}
           <Button
             variant="ghost"
             size="sm"
             onClick={onLogout}
-            className="text-xs text-neutral-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20"
+            className="text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Sign out</span>
+            <LogOut className="w-3 h-3" />
+            <span className="hidden xl:inline ml-1">Sign out</span>
           </Button>
         </div>
       </div>

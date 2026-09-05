@@ -4,6 +4,8 @@ import React, { useRef, useEffect } from "react";
 import { ToastNotificationBanner } from "@/components/dashboard/toast-notification";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
+import { PrimaryGrowthOpportunity } from "@/components/dashboard/primary-growth-opportunity";
+import { GrowthActionLifecycle } from "@/components/dashboard/growth-action-lifecycle";
 import { StoreIntegration } from "@/components/dashboard/store-integration";
 import { OpportunitiesCatalog } from "@/components/dashboard/opportunities-catalog";
 import { OpportunityDrawer } from "@/components/dashboard/modals/opportunity-drawer";
@@ -12,8 +14,6 @@ import { AgentToolsModal } from "@/components/dashboard/modals/agent-tools-modal
 import { RazorpayConnectModal } from "@/components/dashboard/modals/razorpay-connect-modal";
 import { CsvImportModal } from "@/components/dashboard/modals/csv-import-modal";
 import { AgentChatDrawer } from "@/components/agent-chat-drawer";
-import { GrowthIntelligencePanel } from "@/components/growth-intelligence-panel";
-import { AgenticGrowthPlanner } from "@/components/agentic-growth-planner";
 import { AIBuyerReadinessCard } from "@/components/ai-buyer-readiness";
 import { AIBuyerPreviewModal } from "@/components/ai-buyer-preview-modal";
 
@@ -106,6 +106,11 @@ export function DashboardShell() {
     }
   };
 
+  const primaryRankedOpp = displayRankedOpportunities[0] || null;
+  const primaryOpp = primaryRankedOpp
+    ? opportunities.find((o) => o.id === primaryRankedOpp.id) || opportunities[0] || null
+    : opportunities[0] || null;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Toast Notification */}
@@ -114,6 +119,8 @@ export function DashboardShell() {
       {/* Navigation Header */}
       <DashboardHeader
         refreshing={refreshing}
+        merchant={merchant}
+        connectionInfo={connectionInfo}
         onOpenChatDrawer={openChat}
         onOpenAgentPanel={openAgentPanel}
         onRefresh={handleRefreshAll}
@@ -122,10 +129,50 @@ export function DashboardShell() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Merchant Welcome Banner & Stats */}
+        {/* 1. Revenue Snapshot */}
         <DashboardOverview merchant={merchant} opportunities={opportunities} />
 
-        {/* Integration Hub Card */}
+        {/* 2. Primary Growth Opportunity Hero */}
+        <PrimaryGrowthOpportunity
+          opportunity={primaryOpp}
+          rankedOpportunity={primaryRankedOpp}
+          onOpenOpportunity={openOpportunity}
+          onPlanOpportunity={selectPlannerOpportunity}
+        />
+
+        {/* 3. Revenue Opportunity Pipeline */}
+        <OpportunitiesCatalog
+          opportunities={opportunities}
+          loading={loading}
+          onOpenOpportunity={openOpportunity}
+          onPlanOpportunity={selectPlannerOpportunity}
+          onRunAnalysis={handleRunGrowthAnalysis}
+          analyzing={analyzingGrowth}
+          snapshot={growthSnapshot}
+          aiEnhanced={growthAiEnhanced}
+        />
+
+        {/* 4. Growth Action Execution Lifecycle */}
+        <GrowthActionLifecycle
+          merchant={merchant}
+          opportunities={opportunities}
+          selectedPlannerOpportunityId={selectedPlannerOpportunityId}
+          plannerSectionRef={plannerSectionRef}
+          onReviewActions={handleSelectOpportunityById}
+          onPreparationComplete={() => {
+            handleRefreshAll();
+            showToast("success", "Growth plan actions prepared in PENDING_APPROVAL status.");
+          }}
+          onOpenOpportunity={openOpportunity}
+        />
+
+        {/* 5. AI Buyer Readiness Section */}
+        <AIBuyerReadinessCard
+          onOpenPreview={openAIBuyerPreview}
+          onImportCsv={openCsvImport}
+        />
+
+        {/* 6. Integration Hub & Store Infrastructure */}
         <StoreIntegration
           merchant={merchant}
           connectionInfo={connectionInfo}
@@ -134,44 +181,6 @@ export function DashboardShell() {
           onDisconnectRazorpay={handleDisconnectRazorpay}
           onSyncData={handleSyncData}
           onOpenCsvModal={openCsvImport}
-        />
-
-        {/* AI Buyer Readiness Section (Phase 5) */}
-        <AIBuyerReadinessCard
-          onOpenPreview={openAIBuyerPreview}
-          onImportCsv={openCsvImport}
-        />
-
-        {/* AI Growth Intelligence Section (Phase 3) */}
-        <GrowthIntelligencePanel
-          opportunities={displayRankedOpportunities}
-          snapshot={growthSnapshot}
-          analyzing={analyzingGrowth}
-          onRunAnalysis={handleRunGrowthAnalysis}
-          onSelectOpportunity={handleSelectOpportunityById}
-          onPlanOpportunity={selectPlannerOpportunity}
-          aiEnhanced={growthAiEnhanced}
-        />
-
-        {/* AI Agentic Growth Planner Section (Phase 4) */}
-        {selectedPlannerOpportunityId && (
-          <div ref={plannerSectionRef} id="growth-planner-section" className="scroll-mt-6">
-            <AgenticGrowthPlanner
-              opportunityId={selectedPlannerOpportunityId}
-              onReviewActions={handleSelectOpportunityById}
-              onPreparationComplete={() => {
-                handleRefreshAll();
-                showToast("success", "Growth plan actions prepared in PENDING_APPROVAL status.");
-              }}
-            />
-          </div>
-        )}
-
-        {/* Opportunities Catalog Section */}
-        <OpportunitiesCatalog
-          opportunities={opportunities}
-          loading={loading}
-          onOpenOpportunity={openOpportunity}
         />
       </main>
 
