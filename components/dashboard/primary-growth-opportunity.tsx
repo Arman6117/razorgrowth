@@ -4,9 +4,7 @@ import React from "react";
 import {
   ArrowRight,
   ShieldCheck,
-  Sparkles,
   Bot,
-  Users,
   Award,
   Layers,
   ChevronRight,
@@ -39,7 +37,7 @@ export function PrimaryGrowthOpportunity({
           No Primary Opportunity Available
         </h3>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-          Synchronize transaction history or run the database seed to detect high-converting co-purchase opportunities.
+          Run Growth Analysis to identify transaction-backed revenue opportunities.
         </p>
       </Card>
     );
@@ -51,154 +49,172 @@ export function PrimaryGrowthOpportunity({
   ).toFixed(1);
   const jointCount = rankedOpportunity?.evidence?.customersTogether ?? opportunity.customersTogether;
   const sourceBuyerCount = rankedOpportunity?.evidence?.sourceCustomers ?? opportunity.sourceCustomers;
-  const confidencePercent = rankedOpportunity?.confidence
-    ? Math.round(rankedOpportunity.confidence * 100)
-    : null;
 
   return (
-    <Card className="border-indigo-300/80 dark:border-indigo-800/80 bg-gradient-to-br from-white to-neutral-50/70 dark:from-neutral-900 dark:to-neutral-900/60 shadow-sm overflow-hidden">
-      {/* Top Banner Bar */}
-      <div className="px-5 py-3 border-b border-border/80 bg-neutral-50/60 dark:bg-neutral-800/40 flex flex-wrap items-center justify-between gap-2">
+    <Card className="border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-br from-white via-white to-indigo-50/20 dark:from-neutral-900 dark:via-neutral-900 dark:to-indigo-950/10 shadow-xs overflow-hidden">
+      {/* Compact Top Banner Bar */}
+      <div className="px-4 sm:px-5 py-2 border-b border-border/80 bg-neutral-50/70 dark:bg-neutral-800/40 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 select-none">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 select-none">
             <Award className="w-3 h-3 text-amber-400 dark:text-amber-500" />
             Top Revenue Opportunity
           </span>
-          <span className="text-[11px] font-medium text-muted-foreground">
-            Ranked #1 by Historical Conversion Velocity
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Top-ranked opportunity based on purchase history
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {confidencePercent !== null && (
-            <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 select-none">
-              {confidencePercent}% Confidence
-            </span>
-          )}
-          <AIBadge variant="subtle" icon="none">
-            Cross-Sell
-          </AIBadge>
-        </div>
+        <AIBadge variant="subtle" icon="none">
+          Cross-Sell
+        </AIBadge>
       </div>
 
       {/* Main Hero Body */}
-      <div className="p-5 sm:p-6 space-y-5">
-        {/* Source -> Target Product Conversion Flow */}
-        <div className="grid grid-cols-1 md:grid-cols-11 gap-4 items-center">
-          {/* Source Product Box */}
-          <div className="md:col-span-5 p-4 rounded-xl bg-card border border-border space-y-1">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Customers who already purchased:
+      <div className="p-4 sm:p-5 space-y-3.5">
+        {/* Top Row: Conversion Track (Left) + Value & Reach Metrics (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+          {/* 1. SOURCE -> TARGET CONVERSION TRACK (col-span-7) */}
+          <div className="lg:col-span-7 p-3.5 rounded-xl bg-card border border-border flex flex-col justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Recommended Product Cross-Sell
             </div>
-            <div className="text-base font-bold text-foreground">
-              {opportunity.sourceProductName}
-            </div>
-            <div className="text-xs text-muted-foreground font-mono">
-              Observed Buyer Cohort: <strong className="text-foreground">{sourceBuyerCount} buyers</strong>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              {/* Source Product */}
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+                  Purchased
+                </span>
+                <div
+                  className="text-sm sm:text-base font-bold text-foreground truncate"
+                  title={opportunity.sourceProductName}
+                >
+                  {opportunity.sourceProductName}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {sourceBuyerCount} past buyers
+                </span>
+              </div>
+
+              {/* Desktop Arrow */}
+              <div className="hidden sm:flex items-center justify-center px-1 text-muted-foreground shrink-0">
+                <ArrowRight className="w-4 h-4 text-neutral-400" />
+              </div>
+
+              {/* Mobile Direction Indicator */}
+              <div className="flex sm:hidden items-center gap-1 text-xs text-muted-foreground py-0.5">
+                <ArrowRight className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-[11px] font-medium">Cross-sell offer</span>
+              </div>
+
+              {/* Target Product */}
+              <div className="flex-1 min-w-0 sm:text-right">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block font-medium">
+                  Recommend Offer
+                </span>
+                <div
+                  className="text-sm sm:text-base font-bold text-foreground truncate"
+                  title={opportunity.targetProductName}
+                >
+                  {opportunity.targetProductName}
+                </div>
+                <div className="text-xs text-muted-foreground sm:justify-end flex items-center gap-1">
+                  <span>Price:</span>
+                  <FinancialValue value={opportunity.targetProductPrice} size="sm" variant="default" />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Arrow Flow Icon */}
-          <div className="md:col-span-1 flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 border border-border flex items-center justify-center text-foreground shrink-0 shadow-2xs">
-              <ArrowRight className="w-4 h-4" />
+          {/* 2 & 3. OPPORTUNITY VALUE & ELIGIBLE AUDIENCE (col-span-5) */}
+          <div className="lg:col-span-5 grid grid-cols-2 gap-2.5">
+            {/* Opportunity Value */}
+            <div className="p-3.5 rounded-xl bg-emerald-50/30 dark:bg-emerald-950/20 border border-emerald-300/80 dark:border-emerald-800/70 flex flex-col justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                Potential Revenue
+              </span>
+              <div className="my-1">
+                <FinancialValue value={Math.round(estimatedValue)} size="xl" variant="revenue" />
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                Price × reach
+              </span>
             </div>
-          </div>
 
-          {/* Target Product Offer Box */}
-          <div className="md:col-span-5 p-4 rounded-xl bg-card border border-border space-y-1">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Immediate cross-sell offer:
-            </div>
-            <div className="text-base font-bold text-foreground">
-              {opportunity.targetProductName}
-            </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span>Authoritative Offer Price:</span>
-              <FinancialValue value={opportunity.targetProductPrice} size="sm" variant="default" />
+            {/* Eligible Reach */}
+            <div className="p-3.5 rounded-xl bg-card border border-border flex flex-col justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Eligible Audience
+              </span>
+              <div className="my-1">
+                <span className="text-xl sm:text-2xl font-bold text-foreground tabular-nums">
+                  {opportunity.eligibleCustomerCount}
+                </span>
+                <span className="text-xs text-muted-foreground ml-1">buyers</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground truncate">
+                Zero target purchases
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Opportunity Metrics Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 rounded-lg bg-card border border-border">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Eligible Target Audience
+        {/* 4 & 5. OBSERVED ATTACH RATE & GROUNDING EVIDENCE (Compact horizontal strip) */}
+        <div className="p-3 rounded-lg bg-neutral-50/80 dark:bg-neutral-800/40 border border-border flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base sm:text-lg font-bold text-foreground tabular-nums">
+                {attachRatePercent}%
+              </span>
+              <span className="text-xs font-semibold text-foreground">
+                Observed attach rate
+              </span>
             </div>
-            <div className="text-xl font-extrabold text-foreground mt-0.5 font-mono tabular-nums">
-              {opportunity.eligibleCustomerCount} Buyers
-            </div>
-            <span className="text-[11px] text-muted-foreground">
-              Never bought {opportunity.targetProductName}
+            <span className="text-neutral-300 dark:text-neutral-700 hidden sm:inline">•</span>
+            <span className="text-xs text-muted-foreground">
+              {jointCount} historical co-purchases
             </span>
           </div>
 
-          <div className="p-3.5 rounded-lg bg-card border border-emerald-300/70 dark:border-emerald-800/60 bg-emerald-50/15 dark:bg-emerald-950/10">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-              Estimated Opportunity Value
-            </div>
-            <div className="mt-0.5">
-              <FinancialValue value={Math.round(estimatedValue)} size="xl" variant="revenue" />
-            </div>
-            <span className="text-[11px] text-muted-foreground">
-              Based on authoritative price × reach
-            </span>
-          </div>
-
-          <div className="p-3.5 rounded-lg bg-card border border-border">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Observed Attach Rate
-            </div>
-            <div className="text-xl font-extrabold text-foreground mt-0.5 font-mono tabular-nums">
-              {attachRatePercent}%
-            </div>
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {jointCount} co-purchases in checkout history
-            </span>
+          <div className="flex items-center gap-1.5 text-muted-foreground text-xs leading-snug md:text-right">
+            <ShieldCheck className="w-3.5 h-3.5 text-neutral-400 shrink-0 hidden sm:inline" />
+            <p className="line-clamp-2 sm:line-clamp-1">
+              {rankedOpportunity?.strategicInsight ||
+                `${attachRatePercent}% of "${opportunity.sourceProductName}" buyers also bought "${opportunity.targetProductName}". Targeting ${opportunity.eligibleCustomerCount} unfulfilled buyers captures proven co-purchase demand.`}
+            </p>
           </div>
         </div>
 
-        {/* Empirical Grounding Evidence */}
-        <div className="p-3.5 rounded-lg bg-neutral-50/80 dark:bg-neutral-900/60 border border-border space-y-1.5 text-xs">
-          <div className="flex items-center gap-1.5 font-semibold text-foreground text-[11px]">
-            <ShieldCheck className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Authoritative Grounding Evidence</span>
-          </div>
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            {rankedOpportunity?.strategicInsight ||
-              `Empirical order analysis verifies that ${attachRatePercent}% of customers who acquired "${opportunity.sourceProductName}" also purchased "${opportunity.targetProductName}". Targeting the ${opportunity.eligibleCustomerCount} unfulfilled buyers captures untapped revenue with proven purchase affinity.`}
-          </p>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <div className="text-xs text-muted-foreground font-mono">
+        {/* 6. ACTIONS BAR */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
+          <div className="text-xs text-muted-foreground">
             {opportunity.actionCount > 0 ? (
-              <span>{opportunity.actionCount} growth action(s) prepared or active</span>
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {opportunity.actionCount} growth action(s) prepared or active
+              </span>
             ) : (
-              <span>Zero actions dispatched yet • Ready for customer targeting</span>
+              <span>No active campaigns • Ready for customer outreach</span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             {onPlanOpportunity && (
               <Button
                 variant="outline"
-                size="default"
+                size="sm"
                 onClick={() => onPlanOpportunity(opportunity.id)}
-                className="text-xs gap-1.5"
+                className="text-xs text-muted-foreground hover:text-foreground border-border h-8"
               >
-                <Bot className="w-3.5 h-3.5 text-neutral-500" />
+                <Bot className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
                 Plan Campaign
               </Button>
             )}
 
             <Button
               variant="default"
-              size="default"
+              size="sm"
               onClick={() => onOpenOpportunity(opportunity)}
-              className="text-xs gap-1.5"
+              className="text-xs gap-1 font-semibold h-8"
             >
               <span>Target {opportunity.eligibleCustomerCount} Buyers</span>
               <ChevronRight className="w-3.5 h-3.5" />

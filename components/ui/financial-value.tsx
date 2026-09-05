@@ -81,7 +81,7 @@ export function FinancialValue({
   return (
     <span
       className={cn(
-        "inline-flex items-baseline font-mono tabular-nums",
+        "inline-flex items-baseline tabular-nums",
         sizeClasses[size],
         variantClasses[variant],
         className

@@ -48,10 +48,10 @@ export function DashboardHeader({
             <Store className="w-3 h-3 text-neutral-400" />
             <span className="font-semibold text-foreground">{merchant?.name || "TechNova Store"}</span>
             <span className="text-neutral-300 dark:text-neutral-700">•</span>
-            <span className="font-mono text-[11px]">{merchant?.currency || "INR"} (₹)</span>
+            <span className="text-[11px] font-medium text-foreground">{merchant?.currency || "INR"} (₹)</span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 text-[11px] font-mono text-muted-foreground border border-border select-none">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 text-[11px] text-muted-foreground border border-border select-none">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {connectionInfo?.connected ? "Razorpay Gateway Connected" : "Razorpay Test Mode"}
           </div>

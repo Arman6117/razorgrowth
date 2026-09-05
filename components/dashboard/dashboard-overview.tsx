@@ -25,8 +25,8 @@ export function DashboardOverview({ merchant, opportunities }: DashboardOverview
         <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Revenue Snapshot
         </h2>
-        <span className="text-[11px] text-muted-foreground font-mono">
-          Authoritative Gateway & Database Metrics
+        <span className="text-[11px] text-muted-foreground">
+          Live Store & Payment Metrics
         </span>
       </div>
 
@@ -101,7 +101,7 @@ export function DashboardOverview({ merchant, opportunities }: DashboardOverview
             </div>
           </div>
           <div className="mt-2.5">
-            <div className="text-2xl font-extrabold tracking-tight text-foreground font-mono tabular-nums">
+            <div className="text-2xl font-extrabold tracking-tight text-foreground tabular-nums">
               {totalEligibleCustomers.toLocaleString("en-IN")}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
@@ -122,14 +122,14 @@ export function DashboardOverview({ merchant, opportunities }: DashboardOverview
           </div>
           <div className="mt-2.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold tracking-tight text-foreground font-mono tabular-nums">
+              <span className="text-2xl font-extrabold tracking-tight text-foreground tabular-nums">
                 {totalGrowthActions}
               </span>
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                 {executedCount} Paid
               </span>
             </div>
-            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground font-mono">
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
               <span>{pendingCount} Pending Approval</span>
               <span>•</span>
               <span>{executingCount} Active</span>

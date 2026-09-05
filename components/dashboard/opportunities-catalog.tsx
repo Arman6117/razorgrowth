@@ -81,7 +81,7 @@ export function OpportunitiesCatalog({
               Revenue Opportunity Pipeline ({opportunities.length})
             </h2>
             <AIBadge variant="subtle">
-              {aiEnhanced ? "Deterministic + LLM" : "Deterministic Graph"}
+              {aiEnhanced ? "Purchase-history + AI" : "Transaction-backed"}
             </AIBadge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -174,7 +174,7 @@ export function OpportunitiesCatalog({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="p-2.5 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
             <span className="text-[10px] uppercase font-semibold text-muted-foreground">Paid Order Cohort</span>
-            <div className="text-sm font-bold text-foreground mt-0.5 font-mono tabular-nums">
+            <div className="text-sm font-bold text-foreground mt-0.5 tabular-nums">
               {snapshot.orders.paid} Orders
             </div>
             <span className="text-[10px] text-muted-foreground">
@@ -184,7 +184,7 @@ export function OpportunitiesCatalog({
 
           <div className="p-2.5 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
             <span className="text-[10px] uppercase font-semibold text-muted-foreground">Repeat Buyer Affinity</span>
-            <div className="text-sm font-bold text-foreground mt-0.5 font-mono tabular-nums">
+            <div className="text-sm font-bold text-foreground mt-0.5 tabular-nums">
               {snapshot.customers.withPurchases > 0
                 ? `${((snapshot.customers.repeatBuyers / snapshot.customers.withPurchases) * 100).toFixed(1)}%`
                 : "0%"}
@@ -196,7 +196,7 @@ export function OpportunitiesCatalog({
 
           <div className="p-2.5 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
             <span className="text-[10px] uppercase font-semibold text-muted-foreground">Dormant Audience (&gt;30d)</span>
-            <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5 font-mono tabular-nums">
+            <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5 tabular-nums">
               {snapshot.customers.dormantCount} Buyers
             </div>
             <span className="text-[10px] text-muted-foreground">Reactivation target</span>
@@ -204,7 +204,7 @@ export function OpportunitiesCatalog({
 
           <div className="p-2.5 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/50 border border-border">
             <span className="text-[10px] uppercase font-semibold text-muted-foreground">Indexed Catalog</span>
-            <div className="text-sm font-bold text-foreground mt-0.5 font-mono tabular-nums">
+            <div className="text-sm font-bold text-foreground mt-0.5 tabular-nums">
               {snapshot.products.length} Products
             </div>
             <span className="text-[10px] text-muted-foreground">Active for co-purchase</span>
@@ -216,13 +216,27 @@ export function OpportunitiesCatalog({
       {loading ? (
         <Card className="p-10 text-center bg-card border-border">
           <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-2" />
-          <p className="text-xs text-muted-foreground">Analyzing transaction graph and customer eligibility...</p>
+          <p className="text-xs text-muted-foreground">Analyzing purchase history...</p>
         </Card>
       ) : opportunities.length === 0 ? (
         <Card className="p-10 text-center bg-card border-border">
           <Package className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-60" />
-          <h4 className="text-xs font-semibold text-foreground">No opportunities detected</h4>
-          <p className="text-xs text-muted-foreground mt-0.5">Run the database seed script to populate sample transactions.</p>
+          <h4 className="text-xs font-semibold text-foreground">No opportunities found yet</h4>
+          <p className="text-xs text-muted-foreground mt-0.5 max-w-sm mx-auto">
+            Run Growth Analysis to identify transaction-backed revenue opportunities.
+          </p>
+          {onRunAnalysis && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onRunAnalysis}
+              disabled={analyzing}
+              className="mt-3.5 text-xs gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Run Growth Analysis
+            </Button>
+          )}
         </Card>
       ) : filteredAndSortedOpportunities.length === 0 ? (
         <Card className="p-8 text-center bg-card border-border">
@@ -262,9 +276,11 @@ export function OpportunitiesCatalog({
                           </span>
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                          <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-[10px] font-mono">Cross-Sell</span>
+                          <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-[10px] font-medium">
+                            Cross-Sell
+                          </span>
                           {opp.actionCount > 0 && (
-                            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                            <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                               • {opp.actionCount} action(s) prepared
                             </span>
                           )}
@@ -278,9 +294,9 @@ export function OpportunitiesCatalog({
 
                       {/* WHO: Eligible Reach */}
                       <td className="py-3.5 px-4">
-                        <div className="inline-flex items-center gap-1 font-mono font-medium text-foreground">
+                        <div className="inline-flex items-center gap-1 font-medium text-foreground">
                           <Users className="w-3 h-3 text-muted-foreground" />
-                          <span>{opp.eligibleCustomerCount} buyers</span>
+                          <span className="tabular-nums">{opp.eligibleCustomerCount} buyers</span>
                         </div>
                         <div className="text-[10px] text-muted-foreground">Pre-validated</div>
                       </td>
@@ -293,8 +309,8 @@ export function OpportunitiesCatalog({
 
                       {/* WHY: Co-purchase rate & evidence */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2 font-mono">
-                          <span className="font-semibold text-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground tabular-nums">
                             {crossSellPercent}%
                           </span>
                           <div className="w-12 h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">

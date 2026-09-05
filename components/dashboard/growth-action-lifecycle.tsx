@@ -59,7 +59,7 @@ export function GrowthActionLifecycle({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span>Potential: <FinancialValue value={pipelineRevenue} size="xs" variant="muted" /></span>
           <span>→</span>
           <span>Confirmed: <FinancialValue value={realizedRevenue} size="xs" variant="revenue" /></span>
@@ -77,7 +77,7 @@ export function GrowthActionLifecycle({
             <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
           <div className="mt-1.5 flex items-baseline gap-1">
-            <span className="text-xl font-bold font-mono text-foreground">{pendingCount}</span>
+            <span className="text-xl font-bold text-foreground tabular-nums">{pendingCount}</span>
             <span className="text-[10px] text-muted-foreground">actions</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -94,7 +94,7 @@ export function GrowthActionLifecycle({
             <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
           </div>
           <div className="mt-1.5 flex items-baseline gap-1">
-            <span className="text-xl font-bold font-mono text-foreground">{approvedCount}</span>
+            <span className="text-xl font-bold text-foreground tabular-nums">{approvedCount}</span>
             <span className="text-[10px] text-muted-foreground">ready</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -111,7 +111,7 @@ export function GrowthActionLifecycle({
             <CreditCard className="w-3.5 h-3.5 text-indigo-500" />
           </div>
           <div className="mt-1.5 flex items-baseline gap-1">
-            <span className="text-xl font-bold font-mono text-foreground">{executingCount}</span>
+            <span className="text-xl font-bold text-foreground tabular-nums">{executingCount}</span>
             <span className="text-[10px] text-muted-foreground">active</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -128,7 +128,7 @@ export function GrowthActionLifecycle({
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           </div>
           <div className="mt-1.5 flex items-baseline gap-1">
-            <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{executedCount}</span>
+            <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{executedCount}</span>
             <span className="text-[10px] text-muted-foreground">settled</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
